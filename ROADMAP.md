@@ -15,16 +15,19 @@ What is planned next. Dates are not promised.
 - Game modes: Timed (3 minutes) and Zen (no game over)
 - Up to 3 undo steps
 
-## v1.4.0 (this release)
+## v1.4.0 (done)
 
 - Achievements, saved on the device
 - Daily challenge with a board made from the date (no internet)
 - Share your score as an image
 
+## v1.5.0 (this release)
+
+- Hint button: shows a good next swipe
+- Back up and restore progress as copied text
+
 ## Later, not promised
 
-- Hint for the next good move
-- Backup and restore as copied text
 - More languages
 
 ## Release checklist
@@ -34,4 +37,4 @@ What is planned next. Dates are not promised.
 3. `flutter analyze`
 4. `flutter test`
 5. Commit and push
-6. Tag the new version, for example `v1.4.0`, and push the tag
+6. Tag the new version, for example `v1.5.0`, and push the tag

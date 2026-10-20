@@ -11,6 +11,7 @@ import '../game/daily.dart';
 import '../game/game_config.dart';
 import '../game/game_engine.dart';
 import '../game/game_storage.dart';
+import '../game/hint.dart';
 import '../share_card.dart';
 import '../theme.dart';
 import '../widgets/action_button.dart';
@@ -216,6 +217,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       _bannerVisible = true;
     });
     _bannerTimer = Timer(const Duration(milliseconds: 2200), _nextNotice);
+  }
+
+  void _hint() {
+    if (_gameOver || _config.mode == GameMode.daily) return;
+    final direction = suggestMove(_engine.grid);
+    if (direction == null) return;
+    _noticeQueue
+      ..clear()
+      ..add('Hint: swipe ${direction.name}');
+    _nextNotice();
   }
 
   Future<void> _share() async {
@@ -608,6 +619,31 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               label: undoDepth > 0 && !isDaily ? 'Undo ($undoDepth)' : 'Undo',
                               icon: Icons.undo_rounded,
                               onPressed: _engine.canUndo && !isDaily ? _undo : null,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            width: 56,
+                            height: 52,
+                            child: Tooltip(
+                              message: 'Hint',
+                              child: FilledButton(
+                                onPressed:
+                                    _gameOver || isDaily ? null : _hint,
+                                style: FilledButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  backgroundColor: p.panel,
+                                  foregroundColor: p.accentText,
+                                  disabledBackgroundColor:
+                                      p.panel.withValues(alpha: 0.5),
+                                  disabledForegroundColor:
+                                      p.mutedText.withValues(alpha: 0.5),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: const Icon(Icons.lightbulb_outline_rounded),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),

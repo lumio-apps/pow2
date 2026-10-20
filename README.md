@@ -18,6 +18,8 @@ Part of [Lumio Apps](https://github.com/lumio-apps).
 - Daily challenge: one 4x4 board per day, same for everyone, with a streak
 - 17 achievements, saved on the device
 - Share your score as a picture
+- Hint for a good next swipe
+- Back up and restore your progress as copied text
 - Update the app from inside the app (Check for updates, from GitHub Releases)
 - Best score and the running game are saved on the device
 - Endless: play as long as you can make a move
