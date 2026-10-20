@@ -115,9 +115,11 @@ class GameStorage {
   int dailyBest(int day) =>
       _read<int>(_dailyBestDayKey) == day ? _read<int>(_dailyBestScoreKey) ?? 0 : 0;
 
-  Future<void> saveDailyBest(int day, int score) async {
-    await _write(_dailyBestDayKey, day);
-    await _write(_dailyBestScoreKey, score);
+  Future<void> saveDailyBest(int day, int score) {
+    // Both values go into memory at once; the disk writes follow.
+    final dayWrite = _write(_dailyBestDayKey, day);
+    final scoreWrite = _write(_dailyBestScoreKey, score);
+    return Future.wait([dayWrite, scoreWrite]);
   }
 
   Set<String> get unlockedAchievements {
