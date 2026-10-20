@@ -3,20 +3,44 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Saves the best score and the running game on the device. Nothing leaves it.
+///
+/// If the device storage can not be opened, [GameStorage.inMemory] keeps the
+/// game playable (progress is just not saved).
 class GameStorage {
-  GameStorage(this._prefs);
+  GameStorage(SharedPreferences prefs) : _prefs = prefs;
 
-  final SharedPreferences _prefs;
+  GameStorage.inMemory() : _prefs = null;
+
+  final SharedPreferences? _prefs;
 
   static const String _bestKey = 'best_score';
   static const String _gameKey = 'saved_game';
 
-  int get best => _prefs.getInt(_bestKey) ?? 0;
+  int _bestInMemory = 0;
+  String? _gameInMemory;
 
-  Future<void> saveBest(int value) => _prefs.setInt(_bestKey, value);
+  int get best {
+    try {
+      return _prefs?.getInt(_bestKey) ?? _bestInMemory;
+    } catch (_) {
+      return _bestInMemory;
+    }
+  }
+
+  Future<void> saveBest(int value) async {
+    _bestInMemory = value;
+    try {
+      await _prefs?.setInt(_bestKey, value);
+    } catch (_) {}
+  }
 
   Map<String, dynamic>? loadGame() {
-    final raw = _prefs.getString(_gameKey);
+    String? raw;
+    try {
+      raw = _prefs?.getString(_gameKey) ?? _gameInMemory;
+    } catch (_) {
+      raw = _gameInMemory;
+    }
     if (raw == null) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -26,6 +50,11 @@ class GameStorage {
     }
   }
 
-  Future<void> saveGame(Map<String, dynamic> game) =>
-      _prefs.setString(_gameKey, jsonEncode(game));
+  Future<void> saveGame(Map<String, dynamic> game) async {
+    final raw = jsonEncode(game);
+    _gameInMemory = raw;
+    try {
+      await _prefs?.setString(_gameKey, raw);
+    } catch (_) {}
+  }
 }
