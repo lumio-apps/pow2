@@ -195,4 +195,64 @@ void main() {
       expect(engine.restore({'tiles': <dynamic>[]}), isFalse);
     });
   });
+
+  group('undo steps', () {
+    test('keeps up to 3 steps', () {
+      final engine = engineWith([
+        [2, 0, 0, 0],
+        emptyRow,
+        emptyRow,
+        emptyRow,
+      ]);
+      engine.move(Direction.right, spawnTile: false);
+      engine.move(Direction.left, spawnTile: false);
+      engine.move(Direction.right, spawnTile: false);
+      engine.move(Direction.left, spawnTile: false);
+      expect(engine.undoDepth, 3);
+      expect(engine.undo(), isTrue);
+      expect(engine.undo(), isTrue);
+      expect(engine.undo(), isTrue);
+      expect(engine.undo(), isFalse);
+      expect(engine.grid[0], [0, 0, 0, 2]);
+    });
+  });
+
+  group('board sizes', () {
+    test('a 3x3 board starts with 2 tiles', () {
+      final engine = GameEngine(size: 3, random: Random(4))..reset();
+      expect(engine.grid.length, 3);
+      expect(engine.tiles.length, 2);
+    });
+
+    test('a full 3x3 board with no merges is game over', () {
+      final engine = GameEngine(size: 3, random: Random(5));
+      engine.loadValues([
+        [2, 4, 2],
+        [4, 2, 4],
+        [2, 4, 2],
+      ]);
+      expect(engine.isGameOver, isTrue);
+    });
+
+    test('a saved game of another size is rejected', () {
+      final six = GameEngine(size: 6, random: Random(6))..reset();
+      final saved = jsonDecode(jsonEncode(six.toJson())) as Map<String, dynamic>;
+      expect(GameEngine(random: Random(7)).restore(saved), isFalse);
+      expect(GameEngine(size: 6, random: Random(8)).restore(saved), isTrue);
+    });
+  });
+
+  group('zen', () {
+    test('clearing the smallest tiles frees the board', () {
+      final engine = engineWith([
+        [2, 4, 2, 4],
+        [4, 2, 4, 2],
+        [2, 4, 2, 4],
+        [4, 8, 4, 2],
+      ]);
+      expect(engine.isGameOver, isTrue);
+      expect(engine.clearSmallest(), 7);
+      expect(engine.isGameOver, isFalse);
+    });
+  });
 }

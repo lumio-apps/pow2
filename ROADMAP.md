@@ -2,14 +2,14 @@
 
 What is planned next. Dates are not promised.
 
-## v1.2.0 (this release)
+## v1.2.0 (done)
 
 - Four themes: Midnight, Daylight, Ocean and Candy
 - Sound and vibration on merges, both can be switched off
 - Stats screen: best score, biggest tile, games played, total moves
 - Settings screen
 
-## v1.3.0
+## v1.3.0 (this release)
 
 - Board sizes: 3x3, 5x5 and 6x6 next to the classic 4x4
 - Game modes: Timed (3 minutes) and Zen (no game over)
@@ -34,4 +34,4 @@ What is planned next. Dates are not promised.
 3. `flutter analyze`
 4. `flutter test`
 5. Commit and push
-6. Tag the new version, for example `v1.2.0`, and push the tag
+6. Tag the new version, for example `v1.3.0`, and push the tag

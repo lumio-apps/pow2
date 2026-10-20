@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pow2/app_controller.dart';
+import 'package:pow2/game/game_config.dart';
 import 'package:pow2/game/game_stats.dart';
 import 'package:pow2/game/game_storage.dart';
 import 'package:pow2/theme.dart';
@@ -74,13 +75,38 @@ void main() {
 
     test('reset clears the best score and the stats', () {
       final controller = AppController(GameStorage.inMemory());
-      controller.submitScore(500);
+      controller.submitScore(GameConfig.standard, 500);
       controller.recordMove(highestTile: 64);
       controller.recordGameFinished();
       controller.resetStats();
-      expect(controller.best, 0);
+      expect(controller.bestFor(GameConfig.standard), 0);
       expect(controller.stats.totalMoves, 0);
       expect(controller.stats.gamesPlayed, 0);
+    });
+
+    test('best scores are kept per mode and size', () {
+      final controller = AppController(GameStorage.inMemory());
+      const timed5 = GameConfig(GameMode.timed, 5);
+      controller.submitScore(GameConfig.standard, 300);
+      controller.submitScore(timed5, 900);
+      controller.submitScore(timed5, 100);
+      expect(controller.bestFor(GameConfig.standard), 300);
+      expect(controller.bestFor(timed5), 900);
+    });
+
+    test('zen mode has no best score', () {
+      final controller = AppController(GameStorage.inMemory());
+      const zen = GameConfig(GameMode.zen, 4);
+      controller.submitScore(zen, 5000);
+      expect(controller.bestFor(zen), 0);
+    });
+
+    test('the chosen mode and size are remembered', () {
+      final storage = GameStorage.inMemory();
+      AppController(storage).setConfig(const GameConfig(GameMode.zen, 6));
+      final reopened = AppController(storage);
+      expect(reopened.config.mode, GameMode.zen);
+      expect(reopened.config.size, 6);
     });
   });
 }

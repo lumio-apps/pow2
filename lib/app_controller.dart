@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'game/game_config.dart';
 import 'game/game_stats.dart';
 import 'game/game_storage.dart';
 import 'theme.dart';
 
-/// Settings, best score and stats. Screens listen to it through [Pow2Scope].
+/// Settings, best scores and stats. Screens listen to it through [Pow2Scope].
 class AppController extends ChangeNotifier {
   AppController(this.storage)
       : _themeIndex = _safeIndex(storage.themeIndex),
         _sound = storage.soundOn,
         _haptics = storage.hapticsOn,
         _stats = GameStats.fromJson(storage.loadStats()),
-        _best = storage.best;
+        _config = GameConfig(
+          GameConfig.modeFromName(storage.modeName),
+          GameConfig.safeSize(storage.boardSize),
+        );
 
   final GameStorage storage;
 
@@ -20,7 +24,8 @@ class AppController extends ChangeNotifier {
   bool _sound;
   bool _haptics;
   GameStats _stats;
-  int _best;
+  GameConfig _config;
+  final Map<String, int> _best = {};
 
   static int _safeIndex(int index) =>
       index < 0 || index >= kPalettes.length ? 0 : index;
@@ -30,7 +35,9 @@ class AppController extends ChangeNotifier {
   bool get soundOn => _sound;
   bool get hapticsOn => _haptics;
   GameStats get stats => _stats;
-  int get best => _best;
+
+  /// The mode and board size chosen for the next new game.
+  GameConfig get config => _config;
 
   void setTheme(int index) {
     final safe = _safeIndex(index);
@@ -54,11 +61,26 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setConfig(GameConfig config) {
+    _config = config;
+    storage.saveModeName(config.mode.name);
+    storage.saveBoardSize(config.size);
+    notifyListeners();
+  }
+
+  /// Best score for one kind of game. Zen has none, so it returns 0.
+  int bestFor(GameConfig config) {
+    final key = config.bestKey;
+    if (key == null) return 0;
+    return _best.putIfAbsent(key, () => storage.bestScore(key));
+  }
+
   /// Keeps the best score. No rebuild: the game screen redraws itself.
-  void submitScore(int score) {
-    if (score <= _best) return;
-    _best = score;
-    storage.saveBest(score);
+  void submitScore(GameConfig config, int score) {
+    final key = config.bestKey;
+    if (key == null || score <= bestFor(config)) return;
+    _best[key] = score;
+    storage.saveBestScore(key, score);
   }
 
   void recordMove({required int highestTile}) {
@@ -77,12 +99,15 @@ class AppController extends ChangeNotifier {
     storage.saveStats(_stats.toJson());
   }
 
-  /// Clears the best score and all statistics.
+  /// Clears all best scores and all statistics.
   void resetStats() {
     _stats = const GameStats();
-    _best = 0;
     storage.saveStats(_stats.toJson());
-    storage.saveBest(0);
+    for (final config in GameConfig.scored) {
+      final key = config.bestKey;
+      if (key != null) storage.saveBestScore(key, 0);
+    }
+    _best.clear();
     notifyListeners();
   }
 

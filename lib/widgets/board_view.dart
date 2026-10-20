@@ -4,28 +4,36 @@ import '../app_controller.dart';
 import '../game/game_engine.dart';
 import 'tile_widget.dart';
 
-/// The 4x4 board. Tiles are positioned with [AnimatedPositioned] so they slide.
+/// The board. Tiles are positioned with [AnimatedPositioned] so they slide.
 class BoardView extends StatelessWidget {
-  const BoardView({super.key, required this.tiles, required this.dying});
+  const BoardView({
+    super.key,
+    required this.size,
+    required this.tiles,
+    required this.dying,
+  });
+
+  /// Number of rows and columns.
+  final int size;
 
   final List<Tile> tiles;
 
   /// Tiles that were just merged away. They slide into place and then vanish.
   final List<Tile> dying;
 
-  static const double _padding = 10;
-  static const double _gap = 10;
   static const Duration _slide = Duration(milliseconds: 110);
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    // Bigger boards use thinner gaps so the tiles stay readable.
+    final gap = size >= 5 ? 6.0 : 10.0;
+    final padding = gap;
     return LayoutBuilder(
       builder: (context, constraints) {
         final side = constraints.biggest.shortestSide;
-        final cell =
-            (side - 2 * _padding - (GameEngine.size - 1) * _gap) / GameEngine.size;
-        double offset(int index) => _padding + index * (cell + _gap);
+        final cell = (side - 2 * padding - (size - 1) * gap) / size;
+        double offset(int index) => padding + index * (cell + gap);
 
         Widget tileWidget(Tile tile) => AnimatedPositioned(
               key: ValueKey(tile.id),
@@ -51,8 +59,8 @@ class BoardView extends StatelessWidget {
             ),
             child: Stack(
               children: [
-                for (var r = 0; r < GameEngine.size; r++)
-                  for (var c = 0; c < GameEngine.size; c++)
+                for (var r = 0; r < size; r++)
+                  for (var c = 0; c < size; c++)
                     Positioned(
                       left: offset(c),
                       top: offset(r),

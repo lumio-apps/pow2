@@ -15,12 +15,13 @@ class GameStorage {
   final SharedPreferences? _prefs;
   final Map<String, Object> _memory = {};
 
-  static const String _bestKey = 'best_score';
   static const String _gameKey = 'saved_game';
   static const String _statsKey = 'stats';
   static const String _themeKey = 'theme_index';
   static const String _soundKey = 'sound_on';
   static const String _hapticsKey = 'haptics_on';
+  static const String _modeKey = 'game_mode';
+  static const String _sizeKey = 'board_size';
 
   T? _read<T>(String key) {
     try {
@@ -57,9 +58,9 @@ class GameStorage {
     }
   }
 
-  int get best => _read<int>(_bestKey) ?? 0;
+  int bestScore(String key) => _read<int>(key) ?? 0;
 
-  Future<void> saveBest(int value) => _write(_bestKey, value);
+  Future<void> saveBestScore(String key, int value) => _write(key, value);
 
   Map<String, dynamic>? loadGame() => _readJson(_gameKey);
 
@@ -82,4 +83,12 @@ class GameStorage {
   bool get hapticsOn => _read<bool>(_hapticsKey) ?? true;
 
   Future<void> saveHapticsOn(bool value) => _write(_hapticsKey, value);
+
+  String get modeName => _read<String>(_modeKey) ?? 'classic';
+
+  Future<void> saveModeName(String value) => _write(_modeKey, value);
+
+  int get boardSize => _read<int>(_sizeKey) ?? 4;
+
+  Future<void> saveBoardSize(int value) => _write(_sizeKey, value);
 }

@@ -66,12 +66,16 @@ class _Snapshot {
 
 /// Pure game logic. No Flutter widgets in here, so it is easy to test.
 class GameEngine {
-  GameEngine({Random? random}) : _random = random ?? Random();
+  GameEngine({this.size = 4, Random? random}) : _random = random ?? Random();
 
-  static const int size = 4;
+  /// How many moves can be taken back, one after the other.
+  static const int maxUndo = 3;
 
   /// Tile values that trigger a short congratulation message, once per game.
   static const List<int> milestones = [256, 512, 1024, 2048, 4096, 8192];
+
+  /// Number of rows and columns.
+  final int size;
 
   final Random _random;
 
@@ -82,9 +86,12 @@ class GameEngine {
   int celebrated = 0;
 
   int _nextId = 1;
-  _Snapshot? _undo;
+  final List<_Snapshot> _undoStack = [];
 
-  bool get canUndo => _undo != null;
+  bool get canUndo => _undoStack.isNotEmpty;
+
+  /// How many moves can be taken back right now (0 to [maxUndo]).
+  int get undoDepth => _undoStack.length;
 
   int get highestTile => tiles.fold<int>(0, (m, t) => max(m, t.value));
 
@@ -113,7 +120,7 @@ class GameEngine {
     tiles = [];
     score = 0;
     celebrated = 0;
-    _undo = null;
+    _undoStack.clear();
     _spawn();
     _spawn();
   }
@@ -163,21 +170,32 @@ class GameEngine {
 
     tiles.removeWhere(removed.contains);
     score += gained;
-    _undo = snapshot;
+    _undoStack.add(snapshot);
+    if (_undoStack.length > maxUndo) _undoStack.removeAt(0);
     if (spawnTile) _spawn();
     return MoveResult(moved: true, removed: removed, gained: gained);
   }
 
-  /// Restores the position before the last move. Only one step can be undone.
+  /// Takes back the last move. Up to [maxUndo] moves can be taken back.
   bool undo() {
-    final snapshot = _undo;
-    if (snapshot == null) return false;
+    if (_undoStack.isEmpty) return false;
+    final snapshot = _undoStack.removeLast();
     tiles = snapshot.tiles;
     score = snapshot.score;
     _nextId = snapshot.nextId;
     celebrated = snapshot.celebrated;
-    _undo = null;
     return true;
+  }
+
+  /// Removes every tile that has the smallest value on the board. Zen mode
+  /// uses this when the board is full, so the game never ends.
+  /// Returns how many tiles were removed.
+  int clearSmallest() {
+    if (tiles.isEmpty) return 0;
+    final smallest = tiles.map((t) => t.value).reduce(min);
+    final before = tiles.length;
+    tiles.removeWhere((t) => t.value == smallest);
+    return before - tiles.length;
   }
 
   /// Returns the highest milestone newly reached, or null. Call once per move.
@@ -192,15 +210,19 @@ class GameEngine {
   }
 
   Map<String, dynamic> toJson() => {
+        'size': size,
         'tiles': tiles.map((t) => t.toJson()).toList(),
         'score': score,
         'nextId': _nextId,
         'celebrated': celebrated,
       };
 
-  /// Loads a saved game. Returns false (and changes nothing) if the data is invalid.
+  /// Loads a saved game. Returns false (and changes nothing) if the data is
+  /// invalid or was saved for a different board size.
   bool restore(Map<String, dynamic> json) {
     try {
+      final savedSize = (json['size'] as int?) ?? 4;
+      if (savedSize != size) return false;
       final loaded = (json['tiles'] as List)
           .map((e) => Tile.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -222,7 +244,7 @@ class GameEngine {
       score = savedScore;
       _nextId = max(savedNextId, maxId + 1);
       celebrated = savedCelebrated;
-      _undo = null;
+      _undoStack.clear();
       return true;
     } catch (_) {
       return false;
@@ -241,7 +263,7 @@ class GameEngine {
     }
     score = 0;
     celebrated = 0;
-    _undo = null;
+    _undoStack.clear();
   }
 
   /// Tiles of one row or column, ordered from the edge they move towards.

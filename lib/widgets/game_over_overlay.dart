@@ -8,6 +8,7 @@ import 'action_button.dart';
 class GameOverOverlay extends StatelessWidget {
   const GameOverOverlay({
     super.key,
+    this.title = 'No moves left',
     required this.score,
     required this.bestTile,
     required this.canUndo,
@@ -15,6 +16,7 @@ class GameOverOverlay extends StatelessWidget {
     required this.onUndo,
   });
 
+  final String title;
   final int score;
   final int bestTile;
   final bool canUndo;
@@ -60,7 +62,7 @@ class GameOverOverlay extends StatelessWidget {
                 ),
                 const SizedBox(height: 28),
                 Text(
-                  'No moves left',
+                  title,
                   style: TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.w800,

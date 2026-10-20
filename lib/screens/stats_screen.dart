@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
 import '../format.dart';
+import '../game/game_config.dart';
 import '../widgets/action_button.dart';
 
 class StatsScreen extends StatelessWidget {
@@ -16,7 +17,7 @@ class StatsScreen extends StatelessWidget {
         backgroundColor: p.dialog,
         title: const Text('Reset stats?'),
         content: const Text(
-          'This clears your best score and all statistics. '
+          'This clears all best scores and all statistics. '
           'It can not be undone.',
         ),
         actions: [
@@ -41,6 +42,14 @@ class StatsScreen extends StatelessWidget {
     final stats = app.stats;
     final bestTile = stats.highestTile;
 
+    // Classic 4x4 is always listed. Other kinds appear once they have a score.
+    final scored = [
+      for (final config in GameConfig.scored)
+        if ((config.mode == GameMode.classic && config.size == 4) ||
+            app.bestFor(config) > 0)
+          config,
+    ];
+
     return Scaffold(
       backgroundColor: p.background,
       appBar: AppBar(title: const Text('Stats')),
@@ -56,11 +65,12 @@ class StatsScreen extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _StatRow(
-                    label: 'Best score',
-                    value: formatNumber(app.best),
-                    highlight: true,
-                  ),
+                  for (final config in scored)
+                    _StatRow(
+                      label: 'Best · ${config.label}',
+                      value: formatNumber(app.bestFor(config)),
+                      highlight: true,
+                    ),
                   _StatRow(
                     label: 'Biggest tile',
                     value: bestTile == 0 ? '-' : '$bestTile',
@@ -124,10 +134,13 @@ class _StatRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 16, color: p.mutedText),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 16, color: p.mutedText),
+            ),
           ),
+          const SizedBox(width: 12),
           Text(
             value,
             style: TextStyle(

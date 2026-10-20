@@ -1,16 +1,19 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_controller.dart';
 import '../format.dart';
+import '../game/game_config.dart';
 import '../game/game_engine.dart';
 import '../game/game_storage.dart';
 import '../theme.dart';
 import '../widgets/action_button.dart';
 import '../widgets/board_view.dart';
 import '../widgets/game_over_overlay.dart';
+import '../widgets/setup_sheet.dart';
 import 'settings_screen.dart';
 import 'stats_screen.dart';
 
@@ -34,14 +37,20 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
-  final GameEngine _engine = GameEngine();
-  List<Tile> _dying = const <Tile>[];
+class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
+  late GameConfig _config;
+  late GameEngine _engine;
+  int _secondsLeft = GameConfig.timedSeconds;
+  bool _timeUp = false;
   bool _gameOver = false;
+  int _gameNumber = 0;
+  List<Tile> _dying = const <Tile>[];
   bool _bannerVisible = false;
   String _bannerText = '';
   Timer? _dyingTimer;
   Timer? _bannerTimer;
+  Timer? _ticker;
+  bool _inBackground = false;
   double _dx = 0;
   double _dy = 0;
   bool _swipeHandled = false;
@@ -52,18 +61,93 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadGame();
+  }
+
+  /// Continues the saved game, or starts a new one with the chosen settings.
+  void _loadGame() {
+    var config = _app.config;
+    GameEngine? engine;
     final saved = _storage.loadGame();
-    if (saved == null || !_engine.restore(saved)) {
-      _engine.reset();
+    if (saved != null) {
+      final savedSize = saved['size'];
+      final size = savedSize is int ? savedSize : 4;
+      if (GameConfig.sizes.contains(size)) {
+        final candidate = GameEngine(size: size);
+        if (candidate.restore(saved)) {
+          engine = candidate;
+          final modeName = saved['mode'];
+          config = GameConfig(
+            GameConfig.modeFromName(modeName is String ? modeName : null),
+            size,
+          );
+          final secs = saved['secs'];
+          if (secs is int) {
+            _secondsLeft = secs.clamp(0, GameConfig.timedSeconds);
+          }
+        }
+      }
     }
-    _gameOver = _engine.isGameOver;
+    if (engine == null) {
+      engine = GameEngine(size: config.size)..reset();
+      _secondsLeft = GameConfig.timedSeconds;
+    }
+    _config = config;
+    _engine = engine;
+    _timeUp = config.mode == GameMode.timed && _secondsLeft <= 0;
+    if (config.mode == GameMode.zen && engine.isGameOver) {
+      engine.clearSmallest();
+    }
+    _gameOver = _timeUp || (config.mode != GameMode.zen && engine.isGameOver);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _dyingTimer?.cancel();
     _bannerTimer?.cancel();
+    _ticker?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _inBackground = state != AppLifecycleState.resumed;
+    if (_inBackground) _saveGame();
+  }
+
+  void _saveGame() {
+    _storage.saveGame({
+      ..._engine.toJson(),
+      'mode': _config.mode.name,
+      'secs': _secondsLeft,
+    });
+  }
+
+  void _startTicker() {
+    if (_ticker != null) return;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _inBackground || _gameOver) return;
+      setState(() => _secondsLeft = max(0, _secondsLeft - 1));
+      if (_secondsLeft == 0) _onTimeUp();
+    });
+  }
+
+  void _stopTicker() {
+    _ticker?.cancel();
+    _ticker = null;
+  }
+
+  void _onTimeUp() {
+    _stopTicker();
+    setState(() {
+      _timeUp = true;
+      _gameOver = true;
+    });
+    _app.recordGameFinished();
+    _app.gameOverFeedback();
+    _saveGame();
   }
 
   void _move(Direction direction) {
@@ -72,16 +156,32 @@ class _GameScreenState extends State<GameScreen> {
     if (!result.moved) return;
 
     final milestone = _engine.takeMilestone();
-    final over = _engine.isGameOver;
     _dyingTimer?.cancel();
-    _app.submitScore(_engine.score);
+    _app.submitScore(_config, _engine.score);
     _app.recordMove(highestTile: _engine.highestTile);
+
+    String? notice =
+        milestone == null ? null : (_milestoneMessages[milestone] ?? 'Great job!');
+    var over = false;
+    if (_engine.isGameOver) {
+      if (_config.mode == GameMode.zen) {
+        _engine.clearSmallest();
+        notice = 'Board full: smallest tiles cleared';
+      } else {
+        over = true;
+      }
+    }
+    if (over) {
+      _stopTicker();
+    } else if (_config.mode == GameMode.timed) {
+      _startTicker();
+    }
 
     setState(() {
       _dying = result.removed;
       _gameOver = over;
-      if (milestone != null) {
-        _bannerText = _milestoneMessages[milestone] ?? 'Great job!';
+      if (notice != null) {
+        _bannerText = notice;
         _bannerVisible = true;
       }
     });
@@ -92,10 +192,10 @@ class _GameScreenState extends State<GameScreen> {
         if (mounted) setState(() => _dying = const <Tile>[]);
       });
     }
-    if (milestone != null) {
-      _app.milestoneFeedback();
+    if (milestone != null) _app.milestoneFeedback();
+    if (notice != null) {
       _bannerTimer?.cancel();
-      _bannerTimer = Timer(const Duration(milliseconds: 2000), () {
+      _bannerTimer = Timer(const Duration(milliseconds: 2200), () {
         if (mounted) setState(() => _bannerVisible = false);
       });
     }
@@ -103,10 +203,11 @@ class _GameScreenState extends State<GameScreen> {
       _app.recordGameFinished();
       _app.gameOverFeedback();
     }
-    _storage.saveGame(_engine.toJson());
+    _saveGame();
   }
 
   void _undo() {
+    if (_timeUp) return;
     final wasOver = _gameOver;
     if (!_engine.undo()) return;
     if (wasOver) _app.unrecordGameFinished();
@@ -115,26 +216,34 @@ class _GameScreenState extends State<GameScreen> {
       _dying = const <Tile>[];
       _gameOver = false;
     });
-    _storage.saveGame(_engine.toJson());
+    if (wasOver && _config.mode == GameMode.timed && _secondsLeft > 0) {
+      _startTicker();
+    }
+    _saveGame();
   }
 
-  void _newGame() {
-    // A game that was started but not lost still counts as played.
+  void _startNew(GameConfig config) {
+    // A game that was started but not finished still counts as played.
     if (!_gameOver && _engine.score > 0) _app.recordGameFinished();
+    _stopTicker();
     _dyingTimer?.cancel();
     _bannerTimer?.cancel();
     setState(() {
-      _engine.reset();
-      _dying = const <Tile>[];
+      _config = config;
+      _engine = GameEngine(size: config.size)..reset();
+      _secondsLeft = GameConfig.timedSeconds;
+      _timeUp = false;
       _gameOver = false;
+      _dying = const <Tile>[];
       _bannerVisible = false;
+      _gameNumber++;
     });
-    _storage.saveGame(_engine.toJson());
+    _saveGame();
   }
 
   Future<void> _confirmNewGame() async {
     if (_gameOver || _engine.score == 0) {
-      _newGame();
+      _startNew(_config);
       return;
     }
     final p = context.palette;
@@ -156,7 +265,22 @@ class _GameScreenState extends State<GameScreen> {
         ],
       ),
     );
-    if (confirmed == true && mounted) _newGame();
+    if (confirmed == true && mounted) _startNew(_config);
+  }
+
+  Future<void> _openSetup() async {
+    final chosen = await showModalBottomSheet<GameConfig>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.palette.dialog,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => SetupSheet(initial: _config),
+    );
+    if (chosen == null || !mounted) return;
+    _app.setConfig(chosen);
+    _startNew(chosen);
   }
 
   void _openStats() {
@@ -201,9 +325,17 @@ class _GameScreenState extends State<GameScreen> {
     return KeyEventResult.handled;
   }
 
+  String _formatTime(int seconds) =>
+      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final isZen = _config.mode == GameMode.zen;
+    final isTimed = _config.mode == GameMode.timed;
+    final undoDepth = _engine.undoDepth;
+    final lowTime = isTimed && _secondsLeft <= 10;
+
     return Scaffold(
       backgroundColor: p.background,
       body: Focus(
@@ -227,42 +359,113 @@ class _GameScreenState extends State<GameScreen> {
                       _Header(
                         palette: p,
                         score: _engine.score,
-                        best: _app.best,
+                        secondLabel: isZen ? 'TILE' : 'BEST',
+                        secondValue: isZen
+                            ? '${_engine.highestTile}'
+                            : formatNumber(_app.bestFor(_config)),
                       ),
                       const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text.rich(
+                          TextSpan(
+                            text: 'Merge the tiles and ',
+                            children: [
+                              TextSpan(
+                                text: 'keep growing',
+                                style: TextStyle(
+                                  color: p.accentText,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: p.mutedText,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       Row(
                         children: [
-                          Expanded(
-                            child: Text.rich(
-                              TextSpan(
-                                text: 'Merge the tiles and ',
-                                children: [
-                                  TextSpan(
-                                    text: 'keep growing',
-                                    style: TextStyle(
-                                      color: p.accentText,
-                                      fontWeight: FontWeight.w800,
+                          Semantics(
+                            button: true,
+                            label: 'Change mode and board size',
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _openSetup,
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: p.mutedText.withValues(alpha: 0.5),
                                     ),
                                   ),
-                                ],
-                              ),
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                color: p.mutedText,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _config.label,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: p.text,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.expand_more_rounded,
+                                        size: 18,
+                                        color: p.mutedText,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                           ),
+                          if (isTimed) ...[
+                            const SizedBox(width: 12),
+                            Icon(
+                              Icons.timer_outlined,
+                              size: 18,
+                              color: lowTime
+                                  ? const Color(0xFFD6453D)
+                                  : p.accentText,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatTime(_secondsLeft),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: lowTime
+                                    ? const Color(0xFFD6453D)
+                                    : p.text,
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
                           IconButton(
                             tooltip: 'Stats',
                             onPressed: _openStats,
                             color: p.mutedText,
+                            visualDensity: VisualDensity.compact,
                             icon: const Icon(Icons.bar_chart_rounded),
                           ),
                           IconButton(
                             tooltip: 'Settings',
                             onPressed: _openSettings,
                             color: p.mutedText,
+                            visualDensity: VisualDensity.compact,
                             icon: const Icon(Icons.settings_rounded),
                           ),
                         ],
@@ -271,6 +474,8 @@ class _GameScreenState extends State<GameScreen> {
                       Expanded(
                         child: Center(
                           child: BoardView(
+                            key: ValueKey(_gameNumber),
+                            size: _engine.size,
                             tiles: _engine.tiles,
                             dying: _dying,
                           ),
@@ -281,7 +486,7 @@ class _GameScreenState extends State<GameScreen> {
                         children: [
                           Expanded(
                             child: ActionButton(
-                              label: 'Undo',
+                              label: undoDepth > 0 ? 'Undo ($undoDepth)' : 'Undo',
                               icon: Icons.undo_rounded,
                               onPressed: _engine.canUndo ? _undo : null,
                             ),
@@ -299,7 +504,9 @@ class _GameScreenState extends State<GameScreen> {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'Swipe anywhere to move the tiles',
+                        isTimed && _ticker == null && !_gameOver
+                            ? 'The clock starts with your first move'
+                            : 'Swipe anywhere to move the tiles',
                         style: TextStyle(fontSize: 13, color: p.mutedText),
                       ),
                       const SizedBox(height: 12),
@@ -334,10 +541,11 @@ class _GameScreenState extends State<GameScreen> {
               if (_gameOver)
                 Positioned.fill(
                   child: GameOverOverlay(
+                    title: _timeUp ? "Time's up" : 'No moves left',
                     score: _engine.score,
                     bestTile: _engine.highestTile,
-                    canUndo: _engine.canUndo,
-                    onNewGame: _newGame,
+                    canUndo: _engine.canUndo && !_timeUp,
+                    onNewGame: () => _startNew(_config),
                     onUndo: _undo,
                   ),
                 ),
@@ -353,12 +561,14 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.palette,
     required this.score,
-    required this.best,
+    required this.secondLabel,
+    required this.secondValue,
   });
 
   final Pow2Palette palette;
   final int score;
-  final int best;
+  final String secondLabel;
+  final String secondValue;
 
   @override
   Widget build(BuildContext context) {
@@ -390,8 +600,8 @@ class _Header extends StatelessWidget {
             const SizedBox(width: 8),
             _ScoreBox(
               palette: palette,
-              label: 'BEST',
-              value: formatNumber(best),
+              label: secondLabel,
+              value: secondValue,
               valueColor: palette.accentText,
             ),
           ],
@@ -476,12 +686,14 @@ class _MilestoneBanner extends StatelessWidget {
         children: [
           Icon(Icons.star_rounded, color: palette.onAccent),
           const SizedBox(width: 8),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: palette.onAccent,
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: palette.onAccent,
+              ),
             ),
           ),
         ],

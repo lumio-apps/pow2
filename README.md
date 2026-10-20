@@ -12,7 +12,9 @@ Part of [Lumio Apps](https://github.com/lumio-apps).
 - Sound and vibration on merges (both can be turned off in Settings)
 - Stats: best score, biggest tile, games played and total moves
 - Short congratulation messages when you reach big tiles
-- Undo your last move
+- Undo up to 3 moves
+- Board sizes 3x3, 4x4, 5x5 and 6x6
+- Modes: Classic, Timed (3 minutes) and Zen (no game over)
 - Update the app from inside the app (Check for updates, from GitHub Releases)
 - Best score and the running game are saved on the device
 - Endless: play as long as you can make a move
