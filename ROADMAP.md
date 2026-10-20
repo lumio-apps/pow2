@@ -21,10 +21,18 @@ What is planned next. Dates are not promised.
 - Daily challenge with a board made from the date (no internet)
 - Share your score as an image
 
-## v1.5.0 (this release)
+## v1.5.0 (done)
 
 - Hint button: shows a good next swipe
 - Back up and restore progress as copied text
+
+## v1.6.0 (this release)
+
+- Achievements, Stats and Settings buttons together at the top
+- New look: score cards, softer board, shaded tiles, glow on big tiles
+- More motion: merge pop with a ring, floating score gain, counting score,
+  banner that drops from the top, game over card that rises, button press,
+  soft screen changes (all off when the phone has "Remove animations" on)
 
 ## Later, not promised
 
@@ -37,4 +45,4 @@ What is planned next. Dates are not promised.
 3. `flutter analyze`
 4. `flutter test`
 5. Commit and push
-6. Tag the new version, for example `v1.5.0`, and push the tag
+6. Tag the new version, for example `v1.6.0`, and push the tag

@@ -4,6 +4,7 @@ import '../app_controller.dart';
 import '../format.dart';
 import '../game/game_config.dart';
 import '../game/achievements.dart';
+import '../page_route.dart';
 import '../widgets/action_button.dart';
 import 'achievements_screen.dart';
 
@@ -100,11 +101,8 @@ class StatsScreen extends StatelessWidget {
                   '/${kAchievements.length}',
               icon: Icons.emoji_events_rounded,
               primary: true,
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AchievementsScreen(),
-                ),
-              ),
+              onPressed: () => Navigator.of(context)
+                  .push(softRoute<void>(const AchievementsScreen())),
             ),
             const SizedBox(height: 16),
             Text(

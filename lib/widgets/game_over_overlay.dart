@@ -33,8 +33,15 @@ class GameOverOverlay extends StatelessWidget {
     final style = p.tileStyle(bestTile);
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 300),
-      builder: (context, value, child) => Opacity(opacity: value, child: child),
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - value) * 24),
+          child: Transform.scale(scale: 0.94 + 0.06 * value, child: child),
+        ),
+      ),
       child: ColoredBox(
         color: p.background.withValues(alpha: 0.96),
         child: SafeArea(

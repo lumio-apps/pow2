@@ -21,7 +21,7 @@ class BoardView extends StatelessWidget {
   /// Tiles that were just merged away. They slide into place and then vanish.
   final List<Tile> dying;
 
-  static const Duration _slide = Duration(milliseconds: 110);
+  static const Duration _slide = Duration(milliseconds: 140);
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +38,7 @@ class BoardView extends StatelessWidget {
         Widget tileWidget(Tile tile) => AnimatedPositioned(
               key: ValueKey(tile.id),
               duration: _slide,
-              curve: Curves.easeOut,
+              curve: Curves.easeOutCubic,
               left: offset(tile.col),
               top: offset(tile.row),
               width: cell,
@@ -55,7 +55,14 @@ class BoardView extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: palette.panel,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: Color(palette.isDark ? 0x66000000 : 0x42503C1E),
+                  blurRadius: 34,
+                  offset: const Offset(0, 16),
+                ),
+              ],
             ),
             child: Stack(
               children: [
@@ -69,7 +76,7 @@ class BoardView extends StatelessWidget {
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           color: palette.emptyCell,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(cell * 0.2),
                         ),
                       ),
                     ),

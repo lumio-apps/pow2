@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../app_controller.dart';
 import '../format.dart';
+import '../page_route.dart';
 import '../game/daily.dart';
 import '../game/game_config.dart';
 import '../game/game_engine.dart';
@@ -17,7 +18,9 @@ import '../theme.dart';
 import '../widgets/action_button.dart';
 import '../widgets/board_view.dart';
 import '../widgets/game_over_overlay.dart';
+import '../widgets/press_scale.dart';
 import '../widgets/setup_sheet.dart';
+import 'achievements_screen.dart';
 import 'settings_screen.dart';
 import 'stats_screen.dart';
 
@@ -55,6 +58,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   Timer? _bannerTimer;
   Timer? _ticker;
   int _dailyDay = 0;
+  int _lastGain = 0;
+  int _gainKey = 0;
   List<int> _dirs = [];
   final List<String> _noticeQueue = [];
   bool _inBackground = false;
@@ -295,6 +300,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     setState(() {
       _dying = result.removed;
       _gameOver = over;
+      _lastGain = result.gained;
+      _gainKey++;
     });
     _showNotices(notices);
 
@@ -318,6 +325,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     setState(() {
       _dying = const <Tile>[];
       _gameOver = false;
+      _lastGain = 0;
     });
     if (wasOver && _config.mode == GameMode.timed && _secondsLeft > 0) {
       _startTicker();
@@ -344,6 +352,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       _gameOver = false;
       _dying = const <Tile>[];
       _bannerVisible = false;
+      _lastGain = 0;
       _gameNumber++;
     });
     _saveGame();
@@ -392,15 +401,15 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   void _openStats() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const StatsScreen()),
-    );
+    Navigator.of(context).push(softRoute<void>(const StatsScreen()));
   }
 
   void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-    );
+    Navigator.of(context).push(softRoute<void>(const SettingsScreen()));
+  }
+
+  void _openAchievements() {
+    Navigator.of(context).push(softRoute<void>(const AchievementsScreen()));
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
@@ -444,6 +453,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     final isDaily = _config.mode == GameMode.daily;
     final undoDepth = _engine.undoDepth;
     final lowTime = isTimed && _secondsLeft <= 10;
+    final timeColor = lowTime ? const Color(0xFFD6453D) : p.accentText;
+    final topInset = MediaQuery.paddingOf(context).top;
+    final glow = Color.lerp(p.background, Colors.white, p.isDark ? 0.07 : 0.6)!;
 
     return Scaffold(
       backgroundColor: p.background,
@@ -458,256 +470,348 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             _swipeHandled = false;
           },
           onPanUpdate: _onPanUpdate,
-          child: Stack(
-            children: [
-              SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-                  child: Column(
-                    children: [
-                      _Header(
-                        palette: p,
-                        score: _engine.score,
-                        secondLabel: isZen ? 'TILE' : 'BEST',
-                        secondValue: isZen
-                            ? '${_engine.highestTile}'
-                            : formatNumber(
-                                isDaily
-                                    ? _app.dailyBest(_dailyDay)
-                                    : _app.bestFor(_config),
-                              ),
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text.rich(
-                          TextSpan(
-                            text: 'Merge the tiles and ',
-                            children: [
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0, -1),
+                radius: 1.15,
+                colors: [glow, p.background],
+                stops: const [0, 0.7],
+              ),
+            ),
+            child: Stack(
+              children: [
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text.rich(
                               TextSpan(
-                                text: 'keep growing',
-                                style: TextStyle(
-                                  color: p.accentText,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                                text: 'Pow',
+                                children: [
+                                  TextSpan(
+                                    text: '2',
+                                    style: TextStyle(color: p.accentText),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: p.mutedText,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Semantics(
-                            button: true,
-                            label: 'Change mode and board size',
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: _openSetup,
-                                borderRadius: BorderRadius.circular(20),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: p.mutedText.withValues(alpha: 0.5),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        _config.label,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: p.text,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Icon(
-                                        Icons.expand_more_rounded,
-                                        size: 18,
-                                        color: p.mutedText,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (isDaily) ...[
-                            const SizedBox(width: 12),
-                            Icon(
-                              Icons.local_fire_department_rounded,
-                              size: 20,
-                              color: p.accentText,
-                            ),
-                            const SizedBox(width: 2),
-                            Text(
-                              '${_app.dailyStreakNow}',
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 38,
                                 fontWeight: FontWeight.w800,
+                                letterSpacing: -1.5,
                                 color: p.text,
                               ),
                             ),
-                          ],
-                          if (isTimed) ...[
-                            const SizedBox(width: 12),
-                            Icon(
-                              Icons.timer_outlined,
-                              size: 18,
-                              color: lowTime
-                                  ? const Color(0xFFD6453D)
-                                  : p.accentText,
+                            Row(
+                              children: [
+                                _RoundIconButton(
+                                  palette: p,
+                                  icon: Icons.emoji_events_rounded,
+                                  label: 'Achievements',
+                                  color: p.accentText,
+                                  badge: _app.unlockedIds.length,
+                                  onTap: _openAchievements,
+                                ),
+                                const SizedBox(width: 10),
+                                _RoundIconButton(
+                                  palette: p,
+                                  icon: Icons.bar_chart_rounded,
+                                  label: 'Stats',
+                                  onTap: _openStats,
+                                ),
+                                const SizedBox(width: 10),
+                                _RoundIconButton(
+                                  palette: p,
+                                  icon: Icons.settings_rounded,
+                                  label: 'Settings',
+                                  onTap: _openSettings,
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _formatTime(_secondsLeft),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: lowTime
-                                    ? const Color(0xFFD6453D)
-                                    : p.text,
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _ScoreCard(
+                                palette: p,
+                                label: 'SCORE',
+                                value: _engine.score,
+                                valueColor: p.text,
+                                gain: _lastGain,
+                                gainKey: _gainKey,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _ScoreCard(
+                                palette: p,
+                                label: isZen ? 'TILE' : 'BEST',
+                                value: isZen
+                                    ? _engine.highestTile
+                                    : (isDaily
+                                        ? _app.dailyBest(_dailyDay)
+                                        : _app.bestFor(_config)),
+                                valueColor: p.accentText,
                               ),
                             ),
                           ],
-                          const Spacer(),
-                          IconButton(
-                            tooltip: 'Stats',
-                            onPressed: _openStats,
-                            color: p.mutedText,
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.bar_chart_rounded),
-                          ),
-                          IconButton(
-                            tooltip: 'Settings',
-                            onPressed: _openSettings,
-                            color: p.mutedText,
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.settings_rounded),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: Center(
-                          child: BoardView(
-                            key: ValueKey(_gameNumber),
-                            size: _engine.size,
-                            tiles: _engine.tiles,
-                            dying: _dying,
-                          ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ActionButton(
-                              label: undoDepth > 0 && !isDaily ? 'Undo ($undoDepth)' : 'Undo',
-                              icon: Icons.undo_rounded,
-                              onPressed: _engine.canUndo && !isDaily ? _undo : null,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          SizedBox(
-                            width: 56,
-                            height: 52,
-                            child: Tooltip(
-                              message: 'Hint',
-                              child: FilledButton(
-                                onPressed:
-                                    _gameOver || isDaily ? null : _hint,
-                                style: FilledButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  backgroundColor: p.panel,
-                                  foregroundColor: p.accentText,
-                                  disabledBackgroundColor:
-                                      p.panel.withValues(alpha: 0.5),
-                                  disabledForegroundColor:
-                                      p.mutedText.withValues(alpha: 0.5),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Semantics(
+                              button: true,
+                              label: 'Change mode and board size',
+                              child: PressScale(
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: _openSetup,
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Container(
+                                      height: 40,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: p.mutedText
+                                              .withValues(alpha: 0.45),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            _config.label,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: p.text,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Icon(
+                                            Icons.expand_more_rounded,
+                                            size: 18,
+                                            color: p.mutedText,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                child: const Icon(Icons.lightbulb_outline_rounded),
+                              ),
+                            ),
+                            const Spacer(),
+                            if (isTimed) ...[
+                              Icon(
+                                Icons.timer_outlined,
+                                size: 20,
+                                color: timeColor,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _formatTime(_secondsLeft),
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  color: timeColor,
+                                ),
+                              ),
+                            ] else if (isDaily) ...[
+                              Icon(
+                                Icons.local_fire_department_rounded,
+                                size: 22,
+                                color: p.accentText,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${_app.dailyStreakNow}',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: p.text,
+                                ),
+                              ),
+                            ] else
+                              Text.rich(
+                                TextSpan(
+                                  text: 'Biggest tile ',
+                                  children: [
+                                    TextSpan(
+                                      text: '${_engine.highestTile}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: p.text,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: p.mutedText,
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (isTimed) ...[
+                          const SizedBox(height: 10),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: TweenAnimationBuilder<double>(
+                              tween: Tween<double>(
+                                end: _secondsLeft / GameConfig.timedSeconds,
+                              ),
+                              duration: const Duration(seconds: 1),
+                              curve: Curves.linear,
+                              builder: (context, value, _) =>
+                                  LinearProgressIndicator(
+                                value: value,
+                                minHeight: 6,
+                                backgroundColor: p.emptyCell,
+                                color: lowTime
+                                    ? const Color(0xFFD6453D)
+                                    : p.accent,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ActionButton(
-                              label: 'New game',
-                              icon: Icons.refresh_rounded,
-                              primary: true,
-                              onPressed: _confirmNewGame,
+                        ],
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: Center(
+                            child: BoardView(
+                              key: ValueKey(_gameNumber),
+                              size: _engine.size,
+                              tiles: _engine.tiles,
+                              dying: _dying,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        isTimed && _ticker == null && !_gameOver
-                            ? 'The clock starts with your first move'
-                            : isDaily
-                                ? 'Same board for everyone today · no undo'
-                                : 'Swipe anywhere to move the tiles',
-                        style: TextStyle(fontSize: 13, color: p.mutedText),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Offline · No ads · No tracking',
-                        style: TextStyle(
-                          fontSize: 12,
-                          letterSpacing: 0.3,
-                          color: p.mutedText,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ActionButton(
+                                label: undoDepth > 0 && !isDaily
+                                    ? 'Undo ($undoDepth)'
+                                    : 'Undo',
+                                icon: Icons.undo_rounded,
+                                onPressed:
+                                    _engine.canUndo && !isDaily ? _undo : null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            PressScale(
+                              child: SizedBox(
+                                width: 56,
+                                height: 56,
+                                child: Tooltip(
+                                  message: 'Hint',
+                                  child: FilledButton(
+                                    onPressed:
+                                        _gameOver || isDaily ? null : _hint,
+                                    style: FilledButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      elevation: 3,
+                                      shadowColor: Color(
+                                        p.isDark ? 0x66000000 : 0x42503C1E,
+                                      ),
+                                      backgroundColor: p.card,
+                                      foregroundColor: p.accentText,
+                                      disabledBackgroundColor:
+                                          p.card.withValues(alpha: 0.5),
+                                      disabledForegroundColor:
+                                          p.mutedText.withValues(alpha: 0.5),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(18),
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.lightbulb_outline_rounded,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ActionButton(
+                                label: 'New game',
+                                icon: Icons.refresh_rounded,
+                                primary: true,
+                                onPressed: _confirmNewGame,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          isTimed && _ticker == null && !_gameOver
+                              ? 'The clock starts with your first move'
+                              : isDaily
+                                  ? 'Same board for everyone today · no undo'
+                                  : 'Swipe anywhere to move the tiles',
+                          style: TextStyle(fontSize: 13, color: p.mutedText),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Offline · No ads · No tracking',
+                          style: TextStyle(
+                            fontSize: 12,
+                            letterSpacing: 0.3,
+                            color: p.mutedText,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Center(
-                    child: AnimatedOpacity(
-                      opacity: _bannerVisible ? 1 : 0,
-                      duration: const Duration(milliseconds: 250),
-                      child: AnimatedScale(
-                        scale: _bannerVisible ? 1 : 0.8,
+                Positioned(
+                  top: topInset + 72,
+                  left: 20,
+                  right: 20,
+                  child: IgnorePointer(
+                    child: AnimatedSlide(
+                      offset: _bannerVisible
+                          ? Offset.zero
+                          : const Offset(0, -1.8),
+                      duration: const Duration(milliseconds: 450),
+                      curve: _bannerVisible
+                          ? Curves.easeOutBack
+                          : Curves.easeIn,
+                      child: AnimatedOpacity(
+                        opacity: _bannerVisible ? 1 : 0,
                         duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOutBack,
-                        child: _MilestoneBanner(palette: p, text: _bannerText),
+                        child: _Banner(palette: p, text: _bannerText),
                       ),
                     ),
                   ),
                 ),
-              ),
-              if (_gameOver)
-                Positioned.fill(
-                  child: GameOverOverlay(
-                    title: _timeUp ? "Time's up" : 'No moves left',
-                    score: _engine.score,
-                    bestTile: _engine.highestTile,
-                    canUndo: _engine.canUndo && !_timeUp && !isDaily,
-                    onNewGame: () => _startNew(_config),
-                    onUndo: _undo,
-                    onShare: _share,
+                if (_gameOver)
+                  Positioned.fill(
+                    child: GameOverOverlay(
+                      title: _timeUp ? "Time's up" : 'No moves left',
+                      score: _engine.score,
+                      bestTile: _engine.highestTile,
+                      canUndo: _engine.canUndo && !_timeUp && !isDaily,
+                      onNewGame: () => _startNew(_config),
+                      onUndo: _undo,
+                      onShare: _share,
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -715,144 +819,279 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
+Color _shadowColor(Pow2Palette p) =>
+    Color(p.isDark ? 0x55000000 : 0x1F503C1E);
+
+class _RoundIconButton extends StatelessWidget {
+  const _RoundIconButton({
     required this.palette,
-    required this.score,
-    required this.secondLabel,
-    required this.secondValue,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+    this.badge = 0,
   });
 
   final Pow2Palette palette;
-  final int score;
-  final String secondLabel;
-  final String secondValue;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+  final int badge;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text.rich(
-          TextSpan(
-            text: 'Pow',
-            children: [
-              TextSpan(text: '2', style: TextStyle(color: palette.accentText)),
-            ],
-          ),
-          style: TextStyle(
-            fontSize: 34,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -1,
-            color: palette.text,
-          ),
-        ),
-        Row(
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: PressScale(
+        child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            _ScoreBox(
-              palette: palette,
-              label: 'SCORE',
-              value: formatNumber(score),
-              valueColor: palette.text,
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: palette.card,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: _shadowColor(palette),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onTap,
+                  child: Icon(
+                    icon,
+                    size: 22,
+                    color: color ?? palette.mutedText,
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(width: 8),
-            _ScoreBox(
-              palette: palette,
-              label: secondLabel,
-              value: secondValue,
-              valueColor: palette.accentText,
-            ),
+            if (badge > 0)
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 18),
+                  height: 18,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: palette.accent,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    '$badge',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: palette.onAccent,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
-      ],
+      ),
     );
   }
 }
 
-class _ScoreBox extends StatelessWidget {
-  const _ScoreBox({
+class _ScoreCard extends StatelessWidget {
+  const _ScoreCard({
     required this.palette,
     required this.label,
     required this.value,
     required this.valueColor,
+    this.gain = 0,
+    this.gainKey = 0,
   });
 
   final Pow2Palette palette;
   final String label;
-  final String value;
+  final int value;
   final Color valueColor;
+
+  /// Points of the last move. Shown for a moment as a floating "+n".
+  final int gain;
+  final int gainKey;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minWidth: 64),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: palette.card,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: _shadowColor(palette),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              letterSpacing: 1,
-              fontWeight: FontWeight.w600,
-              color: palette.mutedText,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 1.4,
+                  fontWeight: FontWeight.w700,
+                  color: palette.mutedText,
+                ),
+              ),
+              TweenAnimationBuilder<int>(
+                tween: IntTween(end: value),
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeOut,
+                builder: (context, shown, _) => FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    formatNumber(shown),
+                    style: TextStyle(
+                      fontSize: 30,
+                      height: 1.15,
+                      fontWeight: FontWeight.w800,
+                      color: valueColor,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: valueColor,
+          if (gain > 0)
+            Positioned(
+              right: 0,
+              top: 0,
+              child: TweenAnimationBuilder<double>(
+                key: ValueKey(gainKey),
+                tween: Tween<double>(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeOut,
+                builder: (context, t, _) {
+                  final opacity = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+                  return Opacity(
+                    opacity: opacity.clamp(0.0, 1.0),
+                    child: Transform.translate(
+                      offset: Offset(0, -26 * t),
+                      child: Text(
+                        '+$gain',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: palette.accentText,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _MilestoneBanner extends StatelessWidget {
-  const _MilestoneBanner({required this.palette, required this.text});
+/// The message that drops from the top: milestones, hints and achievements.
+class _Banner extends StatelessWidget {
+  const _Banner({required this.palette, required this.text});
 
   final Pow2Palette palette;
   final String text;
 
+  static const String _achievementPrefix = 'Achievement: ';
+
   @override
   Widget build(BuildContext context) {
+    final isAchievement = text.startsWith(_achievementPrefix);
+    final isHint = text.startsWith('Hint: ');
+    final icon = isAchievement
+        ? Icons.emoji_events_rounded
+        : isHint
+            ? Icons.lightbulb_outline_rounded
+            : Icons.star_rounded;
+    final light = Color.lerp(palette.accent, Colors.white, 0.4)!;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: palette.accent,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [palette.accent, light],
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x55000000),
-            blurRadius: 18,
-            offset: Offset(0, 6),
+            blurRadius: 24,
+            offset: Offset(0, 10),
           ),
         ],
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star_rounded, color: palette.onAccent),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: palette.onAccent,
-              ),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: palette.onAccent,
+              shape: BoxShape.circle,
             ),
+            child: Icon(icon, size: 22, color: palette.accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: isAchievement
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'ACHIEVEMENT UNLOCKED',
+                        style: TextStyle(
+                          fontSize: 11,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w800,
+                          color: palette.onAccent.withValues(alpha: 0.7),
+                        ),
+                      ),
+                      Text(
+                        text.substring(_achievementPrefix.length),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: palette.onAccent,
+                        ),
+                      ),
+                    ],
+                  )
+                : Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: palette.onAccent,
+                    ),
+                  ),
           ),
         ],
       ),

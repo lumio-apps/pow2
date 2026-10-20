@@ -20,6 +20,7 @@ Part of [Lumio Apps](https://github.com/lumio-apps).
 - Share your score as a picture
 - Hint for a good next swipe
 - Back up and restore your progress as copied text
+- Soft animations (merge pop, score count-up, banners), off when the phone asks for no animations
 - Update the app from inside the app (Check for updates, from GitHub Releases)
 - Best score and the running game are saved on the device
 - Endless: play as long as you can make a move
