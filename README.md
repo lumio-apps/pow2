@@ -8,6 +8,9 @@ Part of [Lumio Apps](https://github.com/lumio-apps).
 
 - Swipe anywhere on the screen to move the tiles
 - Smooth slide, merge and spawn animations
+- Four themes: Midnight, Daylight, Ocean and Candy
+- Sound and vibration on merges (both can be turned off in Settings)
+- Stats: best score, biggest tile, games played and total moves
 - Short congratulation messages when you reach big tiles
 - Undo your last move
 - Update the app from inside the app (Check for updates, from GitHub Releases)

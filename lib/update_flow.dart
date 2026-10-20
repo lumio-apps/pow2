@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'app_controller.dart';
 import 'theme.dart';
 import 'update_checker.dart';
 
 /// The whole "Check for updates" flow: look on GitHub, ask, download, install.
 Future<void> checkForUpdates(BuildContext context) async {
-  _showBusy(context, 'Checking for updates…');
+  final p = context.palette;
+  _showBusy(context, p, 'Checking for updates…');
 
   UpdateInfo? update;
   try {
@@ -32,7 +34,7 @@ Future<void> checkForUpdates(BuildContext context) async {
   final install = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      backgroundColor: Pow2Colors.panel,
+      backgroundColor: p.dialog,
       title: const Text('Update available'),
       content: SingleChildScrollView(
         child: Text(
@@ -46,6 +48,10 @@ Future<void> checkForUpdates(BuildContext context) async {
           child: const Text('Later'),
         ),
         FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: p.accent,
+            foregroundColor: p.onAccent,
+          ),
           onPressed: () => Navigator.pop(dialogContext, true),
           child: const Text('Update'),
         ),
@@ -61,13 +67,13 @@ Future<void> checkForUpdates(BuildContext context) async {
     builder: (_) => PopScope(
       canPop: false,
       child: AlertDialog(
-        backgroundColor: Pow2Colors.panel,
+        backgroundColor: p.dialog,
         title: const Text('Downloading update…'),
         content: ValueListenableBuilder<double>(
           valueListenable: progress,
           builder: (_, value, _) => LinearProgressIndicator(
             value: value > 0 ? value : null,
-            color: Pow2Colors.gold,
+            color: p.accentText,
           ),
         ),
       ),
@@ -88,22 +94,22 @@ Future<void> checkForUpdates(BuildContext context) async {
   }
 }
 
-void _showBusy(BuildContext context, String text) {
+void _showBusy(BuildContext context, Pow2Palette p, String text) {
   showDialog<void>(
     context: context,
     barrierDismissible: false,
     builder: (_) => PopScope(
       canPop: false,
       child: AlertDialog(
-        backgroundColor: Pow2Colors.panel,
+        backgroundColor: p.dialog,
         content: Row(
           children: [
-            const SizedBox(
+            SizedBox(
               width: 24,
               height: 24,
               child: CircularProgressIndicator(
                 strokeWidth: 3,
-                color: Pow2Colors.gold,
+                color: p.accentText,
               ),
             ),
             const SizedBox(width: 20),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../app_controller.dart';
 import '../format.dart';
-import '../theme.dart';
 import 'action_button.dart';
 
 /// Shown when no moves are left.
@@ -23,13 +23,14 @@ class GameOverOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = tileStyleFor(bestTile);
+    final p = context.palette;
+    final style = p.tileStyle(bestTile);
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: 1),
       duration: const Duration(milliseconds: 300),
       builder: (context, value, child) => Opacity(opacity: value, child: child),
       child: ColoredBox(
-        color: Pow2Colors.background.withValues(alpha: 0.96),
+        color: p.background.withValues(alpha: 0.96),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -58,21 +59,18 @@ class GameOverOverlay extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 28),
-                const Text(
+                Text(
                   'No moves left',
                   style: TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.w800,
-                    color: Pow2Colors.text,
+                    color: p.text,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Score ${formatNumber(score)} · Best tile $bestTile',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: Pow2Colors.mutedText,
-                  ),
+                  style: TextStyle(fontSize: 15, color: p.mutedText),
                 ),
                 const SizedBox(height: 28),
                 ActionButton(

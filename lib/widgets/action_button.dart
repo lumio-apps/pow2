@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import '../app_controller.dart';
 
 class ActionButton extends StatelessWidget {
   const ActionButton({
@@ -20,12 +20,13 @@ class ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final style = FilledButton.styleFrom(
       minimumSize: Size.fromHeight(height),
-      backgroundColor: primary ? Pow2Colors.gold : Pow2Colors.panel,
-      foregroundColor: primary ? Pow2Colors.dark : Pow2Colors.text,
-      disabledBackgroundColor: Pow2Colors.panel.withValues(alpha: 0.5),
-      disabledForegroundColor: Pow2Colors.mutedText.withValues(alpha: 0.5),
+      backgroundColor: primary ? p.accent : p.panel,
+      foregroundColor: primary ? p.onAccent : p.text,
+      disabledBackgroundColor: p.panel.withValues(alpha: 0.5),
+      disabledForegroundColor: p.mutedText.withValues(alpha: 0.5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       textStyle: TextStyle(
         fontSize: 15,

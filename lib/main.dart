@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_controller.dart';
 import 'game/game_storage.dart';
 import 'screens/game_screen.dart';
 import 'theme.dart';
@@ -12,7 +13,7 @@ Future<void> main() async {
   // If something breaks while drawing, show the error on screen instead of
   // a blank screen, so it can be reported.
   ErrorWidget.builder = (details) => ColoredBox(
-        color: Pow2Colors.background,
+        color: kSplashBackground,
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -20,7 +21,7 @@ Future<void> main() async {
               details.exceptionAsString(),
               textDirection: TextDirection.ltr,
               style: const TextStyle(
-                color: Pow2Colors.text,
+                color: kSplashText,
                 fontSize: 13,
                 decoration: TextDecoration.none,
               ),
@@ -33,14 +34,6 @@ Future<void> main() async {
     await SystemChrome.setPreferredOrientations(const [
       DeviceOrientation.portraitUp,
     ]);
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarColor: Pow2Colors.background,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
-    );
   } catch (_) {
     // Cosmetic only. The game works without it.
   }
@@ -88,14 +81,14 @@ class _Pow2LoaderState extends State<_Pow2Loader> {
     return const Directionality(
       textDirection: TextDirection.ltr,
       child: ColoredBox(
-        color: Pow2Colors.background,
+        color: kSplashBackground,
         child: Center(
           child: Text(
             'Pow2',
             style: TextStyle(
               fontSize: 40,
               fontWeight: FontWeight.w800,
-              color: Pow2Colors.text,
+              color: kSplashText,
               decoration: TextDecoration.none,
             ),
           ),
@@ -105,26 +98,75 @@ class _Pow2LoaderState extends State<_Pow2Loader> {
   }
 }
 
-class Pow2App extends StatelessWidget {
+class Pow2App extends StatefulWidget {
   const Pow2App({super.key, required this.storage});
 
   final GameStorage storage;
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Pow2',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Pow2Colors.background,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Pow2Colors.gold,
-          brightness: Brightness.dark,
-        ),
+  State<Pow2App> createState() => _Pow2AppState();
+}
+
+class _Pow2AppState extends State<Pow2App> {
+  late final AppController _controller = AppController(widget.storage);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  ThemeData _themeFor(Pow2Palette p) {
+    final brightness = p.isDark ? Brightness.dark : Brightness.light;
+    final scheme = ColorScheme.fromSeed(
+      seedColor: p.accent,
+      brightness: brightness,
+    ).copyWith(
+      primary: p.accentText,
+      onPrimary: p.isDark ? p.onAccent : Colors.white,
+      surface: p.background,
+      onSurface: p.text,
+      onSurfaceVariant: p.mutedText,
+    );
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: p.background,
+      appBarTheme: AppBarTheme(
+        backgroundColor: p.background,
+        foregroundColor: p.text,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
       ),
-      home: GameScreen(storage: storage),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Pow2Scope(
+      controller: _controller,
+      child: Builder(
+        builder: (context) {
+          final p = context.palette;
+          final iconBrightness = p.isDark ? Brightness.light : Brightness.dark;
+          return MaterialApp(
+            title: 'Pow2',
+            debugShowCheckedModeBanner: false,
+            theme: _themeFor(p),
+            builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: iconBrightness,
+                systemNavigationBarColor: p.background,
+                systemNavigationBarIconBrightness: iconBrightness,
+              ),
+              child: child ?? const SizedBox.shrink(),
+            ),
+            home: GameScreen(controller: _controller),
+          );
+        },
+      ),
     );
   }
 }

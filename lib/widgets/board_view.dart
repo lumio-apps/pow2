@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../app_controller.dart';
 import '../game/game_engine.dart';
-import '../theme.dart';
 import 'tile_widget.dart';
 
 /// The 4x4 board. Tiles are positioned with [AnimatedPositioned] so they slide.
@@ -19,6 +19,7 @@ class BoardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return LayoutBuilder(
       builder: (context, constraints) {
         final side = constraints.biggest.shortestSide;
@@ -45,7 +46,7 @@ class BoardView extends StatelessWidget {
           dimension: side,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: Pow2Colors.panel,
+              color: palette.panel,
               borderRadius: BorderRadius.circular(18),
             ),
             child: Stack(
@@ -59,7 +60,7 @@ class BoardView extends StatelessWidget {
                       height: cell,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: Pow2Colors.emptyCell,
+                          color: palette.emptyCell,
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),

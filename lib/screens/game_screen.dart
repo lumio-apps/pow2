@@ -3,14 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../app_controller.dart';
 import '../format.dart';
 import '../game/game_engine.dart';
 import '../game/game_storage.dart';
 import '../theme.dart';
-import '../update_flow.dart';
 import '../widgets/action_button.dart';
 import '../widgets/board_view.dart';
 import '../widgets/game_over_overlay.dart';
+import 'settings_screen.dart';
+import 'stats_screen.dart';
 
 const double _swipeThreshold = 24;
 
@@ -24,9 +26,9 @@ const Map<int, String> _milestoneMessages = {
 };
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, required this.storage});
+  const GameScreen({super.key, required this.controller});
 
-  final GameStorage storage;
+  final AppController controller;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -34,7 +36,6 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   final GameEngine _engine = GameEngine();
-  late int _best;
   List<Tile> _dying = const <Tile>[];
   bool _gameOver = false;
   bool _bannerVisible = false;
@@ -45,11 +46,13 @@ class _GameScreenState extends State<GameScreen> {
   double _dy = 0;
   bool _swipeHandled = false;
 
+  AppController get _app => widget.controller;
+  GameStorage get _storage => widget.controller.storage;
+
   @override
   void initState() {
     super.initState();
-    _best = widget.storage.best;
-    final saved = widget.storage.loadGame();
+    final saved = _storage.loadGame();
     if (saved == null || !_engine.restore(saved)) {
       _engine.reset();
     }
@@ -69,14 +72,14 @@ class _GameScreenState extends State<GameScreen> {
     if (!result.moved) return;
 
     final milestone = _engine.takeMilestone();
+    final over = _engine.isGameOver;
     _dyingTimer?.cancel();
+    _app.submitScore(_engine.score);
+    _app.recordMove(highestTile: _engine.highestTile);
+
     setState(() {
       _dying = result.removed;
-      if (_engine.score > _best) {
-        _best = _engine.score;
-        widget.storage.saveBest(_best);
-      }
-      _gameOver = _engine.isGameOver;
+      _gameOver = over;
       if (milestone != null) {
         _bannerText = _milestoneMessages[milestone] ?? 'Great job!';
         _bannerVisible = true;
@@ -84,31 +87,40 @@ class _GameScreenState extends State<GameScreen> {
     });
 
     if (result.removed.isNotEmpty) {
-      HapticFeedback.lightImpact();
+      _app.mergeFeedback();
       _dyingTimer = Timer(const Duration(milliseconds: 130), () {
         if (mounted) setState(() => _dying = const <Tile>[]);
       });
     }
     if (milestone != null) {
+      _app.milestoneFeedback();
       _bannerTimer?.cancel();
       _bannerTimer = Timer(const Duration(milliseconds: 2000), () {
         if (mounted) setState(() => _bannerVisible = false);
       });
     }
-    widget.storage.saveGame(_engine.toJson());
+    if (over) {
+      _app.recordGameFinished();
+      _app.gameOverFeedback();
+    }
+    _storage.saveGame(_engine.toJson());
   }
 
   void _undo() {
+    final wasOver = _gameOver;
     if (!_engine.undo()) return;
+    if (wasOver) _app.unrecordGameFinished();
     _dyingTimer?.cancel();
     setState(() {
       _dying = const <Tile>[];
       _gameOver = false;
     });
-    widget.storage.saveGame(_engine.toJson());
+    _storage.saveGame(_engine.toJson());
   }
 
   void _newGame() {
+    // A game that was started but not lost still counts as played.
+    if (!_gameOver && _engine.score > 0) _app.recordGameFinished();
     _dyingTimer?.cancel();
     _bannerTimer?.cancel();
     setState(() {
@@ -117,7 +129,7 @@ class _GameScreenState extends State<GameScreen> {
       _gameOver = false;
       _bannerVisible = false;
     });
-    widget.storage.saveGame(_engine.toJson());
+    _storage.saveGame(_engine.toJson());
   }
 
   Future<void> _confirmNewGame() async {
@@ -125,10 +137,11 @@ class _GameScreenState extends State<GameScreen> {
       _newGame();
       return;
     }
+    final p = context.palette;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Pow2Colors.panel,
+        backgroundColor: p.dialog,
         title: const Text('Start a new game?'),
         content: const Text('Your current game will be lost.'),
         actions: [
@@ -144,6 +157,18 @@ class _GameScreenState extends State<GameScreen> {
       ),
     );
     if (confirmed == true && mounted) _newGame();
+  }
+
+  void _openStats() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const StatsScreen()),
+    );
+  }
+
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+    );
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
@@ -178,8 +203,9 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Scaffold(
-      backgroundColor: Pow2Colors.background,
+      backgroundColor: p.background,
       body: Focus(
         autofocus: true,
         onKeyEvent: _onKey,
@@ -198,31 +224,50 @@ class _GameScreenState extends State<GameScreen> {
                   padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
                   child: Column(
                     children: [
-                      _Header(score: _engine.score, best: _best),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text.rich(
-                          const TextSpan(
-                            text: 'Merge the tiles and ',
-                            children: [
-                              TextSpan(
-                                text: 'keep growing',
-                                style: TextStyle(
-                                  color: Pow2Colors.gold,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
-                          ),
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: Pow2Colors.mutedText,
-                          ),
-                        ),
+                      _Header(
+                        palette: p,
+                        score: _engine.score,
+                        best: _app.best,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text.rich(
+                              TextSpan(
+                                text: 'Merge the tiles and ',
+                                children: [
+                                  TextSpan(
+                                    text: 'keep growing',
+                                    style: TextStyle(
+                                      color: p.accentText,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: p.mutedText,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Stats',
+                            onPressed: _openStats,
+                            color: p.mutedText,
+                            icon: const Icon(Icons.bar_chart_rounded),
+                          ),
+                          IconButton(
+                            tooltip: 'Settings',
+                            onPressed: _openSettings,
+                            color: p.mutedText,
+                            icon: const Icon(Icons.settings_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       Expanded(
                         child: Center(
                           child: BoardView(
@@ -253,30 +298,17 @@ class _GameScreenState extends State<GameScreen> {
                         ],
                       ),
                       const SizedBox(height: 14),
-                      const Text(
+                      Text(
                         'Swipe anywhere to move the tiles',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Pow2Colors.mutedText,
-                        ),
+                        style: TextStyle(fontSize: 13, color: p.mutedText),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
+                      Text(
                         'Offline · No ads · No tracking',
                         style: TextStyle(
                           fontSize: 12,
                           letterSpacing: 0.3,
-                          color: Pow2Colors.mutedText,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextButton.icon(
-                        onPressed: () => checkForUpdates(context),
-                        icon: const Icon(Icons.system_update_outlined, size: 16),
-                        label: const Text('Check for updates'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Pow2Colors.mutedText,
-                          textStyle: const TextStyle(fontSize: 12),
+                          color: p.mutedText,
                         ),
                       ),
                     ],
@@ -293,7 +325,7 @@ class _GameScreenState extends State<GameScreen> {
                         scale: _bannerVisible ? 1 : 0.8,
                         duration: const Duration(milliseconds: 250),
                         curve: Curves.easeOutBack,
-                        child: _MilestoneBanner(text: _bannerText),
+                        child: _MilestoneBanner(palette: p, text: _bannerText),
                       ),
                     ),
                   ),
@@ -318,8 +350,13 @@ class _GameScreenState extends State<GameScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.score, required this.best});
+  const _Header({
+    required this.palette,
+    required this.score,
+    required this.best,
+  });
 
+  final Pow2Palette palette;
   final int score;
   final int best;
 
@@ -328,32 +365,34 @@ class _Header extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text.rich(
+        Text.rich(
           TextSpan(
             text: 'Pow',
             children: [
-              TextSpan(text: '2', style: TextStyle(color: Pow2Colors.gold)),
+              TextSpan(text: '2', style: TextStyle(color: palette.accentText)),
             ],
           ),
           style: TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.w800,
             letterSpacing: -1,
-            color: Pow2Colors.text,
+            color: palette.text,
           ),
         ),
         Row(
           children: [
             _ScoreBox(
+              palette: palette,
               label: 'SCORE',
               value: formatNumber(score),
-              valueColor: Pow2Colors.text,
+              valueColor: palette.text,
             ),
             const SizedBox(width: 8),
             _ScoreBox(
+              palette: palette,
               label: 'BEST',
               value: formatNumber(best),
-              valueColor: Pow2Colors.gold,
+              valueColor: palette.accentText,
             ),
           ],
         ),
@@ -364,11 +403,13 @@ class _Header extends StatelessWidget {
 
 class _ScoreBox extends StatelessWidget {
   const _ScoreBox({
+    required this.palette,
     required this.label,
     required this.value,
     required this.valueColor,
   });
 
+  final Pow2Palette palette;
   final String label;
   final String value;
   final Color valueColor;
@@ -379,7 +420,7 @@ class _ScoreBox extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 64),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: Pow2Colors.panel,
+        color: palette.card,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -388,11 +429,11 @@ class _ScoreBox extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               letterSpacing: 1,
               fontWeight: FontWeight.w600,
-              color: Pow2Colors.mutedText,
+              color: palette.mutedText,
             ),
           ),
           Text(
@@ -410,8 +451,9 @@ class _ScoreBox extends StatelessWidget {
 }
 
 class _MilestoneBanner extends StatelessWidget {
-  const _MilestoneBanner({required this.text});
+  const _MilestoneBanner({required this.palette, required this.text});
 
+  final Pow2Palette palette;
   final String text;
 
   @override
@@ -419,7 +461,7 @@ class _MilestoneBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: Pow2Colors.gold,
+        color: palette.accent,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
@@ -432,14 +474,14 @@ class _MilestoneBanner extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.star_rounded, color: Pow2Colors.dark),
+          Icon(Icons.star_rounded, color: palette.onAccent),
           const SizedBox(width: 8),
           Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: Pow2Colors.dark,
+              color: palette.onAccent,
             ),
           ),
         ],

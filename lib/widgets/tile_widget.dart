@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import '../app_controller.dart';
 
 /// One number tile. Pops in when it is spawned and pops when its value changes.
 class TileWidget extends StatefulWidget {
@@ -77,7 +77,7 @@ class _TileWidgetState extends State<TileWidget>
 
   @override
   Widget build(BuildContext context) {
-    final style = tileStyleFor(widget.value);
+    final style = context.palette.tileStyle(widget.value);
     return ScaleTransition(
       scale: _scale,
       child: DecoratedBox(
