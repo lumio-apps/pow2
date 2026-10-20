@@ -16,7 +16,9 @@ void main() {
       ];
       expect(applyMove(grid, Direction.left)![0], [4, 0, 0, 0]);
       expect(applyMove(grid, Direction.right)![0], [0, 0, 0, 4]);
-      expect(applyMove(grid, Direction.up), isNotNull);
+      // The tiles are already on the top row, so up changes nothing.
+      expect(applyMove(grid, Direction.up), isNull);
+      expect(applyMove(grid, Direction.down)![3], [2, 2, 0, 0]);
     });
 
     test('a swipe that changes nothing gives null', () {
