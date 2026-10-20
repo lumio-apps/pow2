@@ -28,6 +28,7 @@ class ActionButton extends StatelessWidget {
       foregroundColor: primary ? p.onAccent : p.text,
       disabledBackgroundColor: p.panel.withValues(alpha: 0.5),
       disabledForegroundColor: p.mutedText.withValues(alpha: 0.5),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       elevation: primary ? 6 : 0,
       shadowColor: p.accent.withValues(alpha: 0.5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -42,7 +43,7 @@ class ActionButton extends StatelessWidget {
         child: FilledButton(
           onPressed: onPressed,
           style: style,
-          child: Text(label),
+          child: FittedBox(fit: BoxFit.scaleDown, child: Text(label)),
         ),
       );
     }
@@ -51,7 +52,7 @@ class ActionButton extends StatelessWidget {
         onPressed: onPressed,
         style: style,
         icon: Icon(icon, size: 20),
-        label: Text(label),
+        label: FittedBox(fit: BoxFit.scaleDown, child: Text(label)),
       ),
     );
   }
