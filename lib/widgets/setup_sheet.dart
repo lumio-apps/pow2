@@ -47,6 +47,7 @@ class _SetupSheetState extends State<SetupSheet> {
               ),
               const SizedBox(height: 8),
             ],
+            if (_mode != GameMode.daily) ...[
             const SizedBox(height: 12),
             _Label(text: 'Board size', color: p.mutedText),
             Wrap(
@@ -74,9 +75,10 @@ class _SetupSheetState extends State<SetupSheet> {
                   ),
               ],
             ),
+            ],
             const SizedBox(height: 24),
             ActionButton(
-              label: 'Start new game',
+              label: _mode == GameMode.daily ? "Play today's challenge" : 'Start new game',
               primary: true,
               height: 56,
               onPressed: () =>

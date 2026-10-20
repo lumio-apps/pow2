@@ -15,6 +15,9 @@ Part of [Lumio Apps](https://github.com/lumio-apps).
 - Undo up to 3 moves
 - Board sizes 3x3, 4x4, 5x5 and 6x6
 - Modes: Classic, Timed (3 minutes) and Zen (no game over)
+- Daily challenge: one 4x4 board per day, same for everyone, with a streak
+- 17 achievements, saved on the device
+- Share your score as a picture
 - Update the app from inside the app (Check for updates, from GitHub Releases)
 - Best score and the running game are saved on the device
 - Endless: play as long as you can make a move

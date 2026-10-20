@@ -255,4 +255,28 @@ void main() {
       expect(engine.isGameOver, isFalse);
     });
   });
+
+  group('daily board', () {
+    test('the same seed and swipes always give the same board', () {
+      GameEngine play(int seed) {
+        final engine = GameEngine(random: Random(seed))..reset();
+        for (final d in [
+          Direction.left,
+          Direction.up,
+          Direction.right,
+          Direction.down,
+          Direction.left,
+          Direction.up,
+        ]) {
+          engine.move(d);
+        }
+        return engine;
+      }
+
+      final a = play(20261020);
+      final b = play(20261020);
+      expect(a.grid, b.grid);
+      expect(a.score, b.score);
+    });
+  });
 }

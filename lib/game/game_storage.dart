@@ -22,6 +22,10 @@ class GameStorage {
   static const String _hapticsKey = 'haptics_on';
   static const String _modeKey = 'game_mode';
   static const String _sizeKey = 'board_size';
+  static const String _dailyPlayedKey = 'daily_played';
+  static const String _dailyBestDayKey = 'daily_best_day';
+  static const String _dailyBestScoreKey = 'daily_best_score';
+  static const String _achievementsKey = 'achievements';
 
   T? _read<T>(String key) {
     try {
@@ -91,4 +95,39 @@ class GameStorage {
   int get boardSize => _read<int>(_sizeKey) ?? 4;
 
   Future<void> saveBoardSize(int value) => _write(_sizeKey, value);
+
+  /// Days (like 20261020) on which the daily challenge was played.
+  Set<int> get dailyPlayed {
+    final raw = _read<String>(_dailyPlayedKey) ?? '';
+    return {
+      for (final part in raw.split(','))
+        if (int.tryParse(part) != null) int.parse(part),
+    };
+  }
+
+  Future<void> saveDailyPlayed(Set<int> days) {
+    final sorted = days.toList()..sort();
+    final recent = sorted.length > 400 ? sorted.sublist(sorted.length - 400) : sorted;
+    return _write(_dailyPlayedKey, recent.join(','));
+  }
+
+  /// Best score of the daily challenge for one day (0 for any other day).
+  int dailyBest(int day) =>
+      _read<int>(_dailyBestDayKey) == day ? _read<int>(_dailyBestScoreKey) ?? 0 : 0;
+
+  Future<void> saveDailyBest(int day, int score) async {
+    await _write(_dailyBestDayKey, day);
+    await _write(_dailyBestScoreKey, score);
+  }
+
+  Set<String> get unlockedAchievements {
+    final raw = _read<String>(_achievementsKey) ?? '';
+    return {
+      for (final part in raw.split(','))
+        if (part.isNotEmpty) part,
+    };
+  }
+
+  Future<void> saveUnlockedAchievements(Set<String> ids) =>
+      _write(_achievementsKey, ids.join(','));
 }

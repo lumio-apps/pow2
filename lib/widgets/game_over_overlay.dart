@@ -14,6 +14,7 @@ class GameOverOverlay extends StatelessWidget {
     required this.canUndo,
     required this.onNewGame,
     required this.onUndo,
+    this.onShare,
   });
 
   final String title;
@@ -22,6 +23,9 @@ class GameOverOverlay extends StatelessWidget {
   final bool canUndo;
   final VoidCallback onNewGame;
   final VoidCallback onUndo;
+
+  /// When set, a "Share score" button is shown.
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +85,15 @@ class GameOverOverlay extends StatelessWidget {
                   height: 56,
                   onPressed: onNewGame,
                 ),
+                if (onShare != null) ...[
+                  const SizedBox(height: 12),
+                  ActionButton(
+                    label: 'Share score',
+                    icon: Icons.ios_share_rounded,
+                    height: 56,
+                    onPressed: onShare,
+                  ),
+                ],
                 if (canUndo) ...[
                   const SizedBox(height: 12),
                   ActionButton(

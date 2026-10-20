@@ -3,12 +3,15 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../app_controller.dart';
 import '../format.dart';
+import '../game/daily.dart';
 import '../game/game_config.dart';
 import '../game/game_engine.dart';
 import '../game/game_storage.dart';
+import '../share_card.dart';
 import '../theme.dart';
 import '../widgets/action_button.dart';
 import '../widgets/board_view.dart';
@@ -50,6 +53,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   Timer? _dyingTimer;
   Timer? _bannerTimer;
   Timer? _ticker;
+  int _dailyDay = 0;
+  List<int> _dirs = [];
+  final List<String> _noticeQueue = [];
   bool _inBackground = false;
   double _dx = 0;
   double _dy = 0;
@@ -65,32 +71,60 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _loadGame();
   }
 
+  GameEngine _dailyEngine(int day) =>
+      GameEngine(size: 4, random: Random(day))..reset();
+
   /// Continues the saved game, or starts a new one with the chosen settings.
   void _loadGame() {
     var config = _app.config;
     GameEngine? engine;
+    final today = dayKey(DateTime.now());
+    _dailyDay = today;
+    _dirs = [];
     final saved = _storage.loadGame();
     if (saved != null) {
-      final savedSize = saved['size'];
-      final size = savedSize is int ? savedSize : 4;
-      if (GameConfig.sizes.contains(size)) {
-        final candidate = GameEngine(size: size);
-        if (candidate.restore(saved)) {
-          engine = candidate;
-          final modeName = saved['mode'];
-          config = GameConfig(
-            GameConfig.modeFromName(modeName is String ? modeName : null),
-            size,
-          );
-          final secs = saved['secs'];
-          if (secs is int) {
-            _secondsLeft = secs.clamp(0, GameConfig.timedSeconds);
+      if (saved['mode'] == GameMode.daily.name) {
+        // A daily game is rebuilt by playing the saved swipes again on the
+        // board of that day. A game from an older day is dropped.
+        final dirs = saved['dirs'];
+        if (saved['day'] == today && dirs is List) {
+          final replayed = _dailyEngine(today);
+          final list = <int>[];
+          for (final d in dirs) {
+            if (d is int && d >= 0 && d < Direction.values.length) {
+              replayed.move(Direction.values[d]);
+              list.add(d);
+            }
+          }
+          replayed.takeMilestone();
+          engine = replayed;
+          _dirs = list;
+          config = GameConfig.dailyChallenge;
+        }
+      } else {
+        final savedSize = saved['size'];
+        final size = savedSize is int ? savedSize : 4;
+        if (GameConfig.sizes.contains(size)) {
+          final candidate = GameEngine(size: size);
+          if (candidate.restore(saved)) {
+            engine = candidate;
+            final modeName = saved['mode'];
+            config = GameConfig(
+              GameConfig.modeFromName(modeName is String ? modeName : null),
+              size,
+            );
+            final secs = saved['secs'];
+            if (secs is int) {
+              _secondsLeft = secs.clamp(0, GameConfig.timedSeconds);
+            }
           }
         }
       }
     }
     if (engine == null) {
-      engine = GameEngine(size: config.size)..reset();
+      engine = config.mode == GameMode.daily
+          ? _dailyEngine(today)
+          : (GameEngine(size: config.size)..reset());
       _secondsLeft = GameConfig.timedSeconds;
     }
     _config = config;
@@ -122,6 +156,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       ..._engine.toJson(),
       'mode': _config.mode.name,
       'secs': _secondsLeft,
+      if (_config.mode == GameMode.daily) ...{'day': _dailyDay, 'dirs': _dirs},
     });
   }
 
@@ -147,7 +182,66 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     });
     _app.recordGameFinished();
     _app.gameOverFeedback();
+    _showNotices(_achievementNotices());
     _saveGame();
+  }
+
+  List<String> _achievementNotices() => [
+        for (final a in _app.checkAchievements(
+          config: _config,
+          score: _engine.score,
+          tile: _engine.highestTile,
+        ))
+          'Achievement: ${a.title}',
+      ];
+
+  /// Shows messages one after the other in the banner.
+  void _showNotices(List<String> notices) {
+    if (notices.isEmpty) return;
+    final idle = _noticeQueue.isEmpty && !_bannerVisible;
+    _noticeQueue.addAll(notices);
+    if (idle) _nextNotice();
+  }
+
+  void _nextNotice() {
+    _bannerTimer?.cancel();
+    if (!mounted) return;
+    if (_noticeQueue.isEmpty) {
+      setState(() => _bannerVisible = false);
+      return;
+    }
+    final text = _noticeQueue.removeAt(0);
+    setState(() {
+      _bannerText = text;
+      _bannerVisible = true;
+    });
+    _bannerTimer = Timer(const Duration(milliseconds: 2200), _nextNotice);
+  }
+
+  Future<void> _share() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final bytes = await renderShareCard(
+        palette: _app.palette,
+        score: _engine.score,
+        tile: _engine.highestTile,
+        modeLabel: _config.label,
+      );
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'I scored ${formatNumber(_engine.score)} in Pow2 '
+              '(${_config.label}). github.com/lumio-apps/pow2',
+          files: [
+            XFile.fromData(bytes, name: 'pow2-score.png', mimeType: 'image/png'),
+          ],
+          fileNameOverrides: const ['pow2-score.png'],
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Couldn't open the share sheet")),
+      );
+    }
   }
 
   void _move(Direction direction) {
@@ -155,36 +249,43 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     final result = _engine.move(direction);
     if (!result.moved) return;
 
+    if (_config.mode == GameMode.daily) {
+      _dirs.add(direction.index);
+      _app.markDailyPlayed(_dailyDay);
+      _app.submitDailyScore(_dailyDay, _engine.score);
+    } else {
+      _app.submitScore(_config, _engine.score);
+    }
     final milestone = _engine.takeMilestone();
     _dyingTimer?.cancel();
-    _app.submitScore(_config, _engine.score);
     _app.recordMove(highestTile: _engine.highestTile);
 
-    String? notice =
-        milestone == null ? null : (_milestoneMessages[milestone] ?? 'Great job!');
+    final notices = <String>[];
+    if (milestone != null) {
+      notices.add(_milestoneMessages[milestone] ?? 'Great job!');
+    }
     var over = false;
     if (_engine.isGameOver) {
       if (_config.mode == GameMode.zen) {
         _engine.clearSmallest();
-        notice = 'Board full: smallest tiles cleared';
+        notices.add('Board full: smallest tiles cleared');
       } else {
         over = true;
       }
     }
     if (over) {
       _stopTicker();
+      _app.recordGameFinished();
     } else if (_config.mode == GameMode.timed) {
       _startTicker();
     }
+    notices.addAll(_achievementNotices());
 
     setState(() {
       _dying = result.removed;
       _gameOver = over;
-      if (notice != null) {
-        _bannerText = notice;
-        _bannerVisible = true;
-      }
     });
+    _showNotices(notices);
 
     if (result.removed.isNotEmpty) {
       _app.mergeFeedback();
@@ -193,21 +294,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       });
     }
     if (milestone != null) _app.milestoneFeedback();
-    if (notice != null) {
-      _bannerTimer?.cancel();
-      _bannerTimer = Timer(const Duration(milliseconds: 2200), () {
-        if (mounted) setState(() => _bannerVisible = false);
-      });
-    }
-    if (over) {
-      _app.recordGameFinished();
-      _app.gameOverFeedback();
-    }
+    if (over) _app.gameOverFeedback();
     _saveGame();
   }
 
   void _undo() {
-    if (_timeUp) return;
+    if (_timeUp || _config.mode == GameMode.daily) return;
     final wasOver = _gameOver;
     if (!_engine.undo()) return;
     if (wasOver) _app.unrecordGameFinished();
@@ -228,9 +320,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _stopTicker();
     _dyingTimer?.cancel();
     _bannerTimer?.cancel();
+    _noticeQueue.clear();
+    _dailyDay = dayKey(DateTime.now());
+    _dirs = [];
     setState(() {
       _config = config;
-      _engine = GameEngine(size: config.size)..reset();
+      _engine = config.mode == GameMode.daily
+          ? _dailyEngine(_dailyDay)
+          : (GameEngine(size: config.size)..reset());
       _secondsLeft = GameConfig.timedSeconds;
       _timeUp = false;
       _gameOver = false;
@@ -333,6 +430,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     final p = context.palette;
     final isZen = _config.mode == GameMode.zen;
     final isTimed = _config.mode == GameMode.timed;
+    final isDaily = _config.mode == GameMode.daily;
     final undoDepth = _engine.undoDepth;
     final lowTime = isTimed && _secondsLeft <= 10;
 
@@ -362,7 +460,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         secondLabel: isZen ? 'TILE' : 'BEST',
                         secondValue: isZen
                             ? '${_engine.highestTile}'
-                            : formatNumber(_app.bestFor(_config)),
+                            : formatNumber(
+                                isDaily
+                                    ? _app.dailyBest(_dailyDay)
+                                    : _app.bestFor(_config),
+                              ),
                       ),
                       const SizedBox(height: 8),
                       Align(
@@ -432,6 +534,23 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
+                          if (isDaily) ...[
+                            const SizedBox(width: 12),
+                            Icon(
+                              Icons.local_fire_department_rounded,
+                              size: 20,
+                              color: p.accentText,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${_app.dailyStreakNow}',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: p.text,
+                              ),
+                            ),
+                          ],
                           if (isTimed) ...[
                             const SizedBox(width: 12),
                             Icon(
@@ -486,9 +605,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         children: [
                           Expanded(
                             child: ActionButton(
-                              label: undoDepth > 0 ? 'Undo ($undoDepth)' : 'Undo',
+                              label: undoDepth > 0 && !isDaily ? 'Undo ($undoDepth)' : 'Undo',
                               icon: Icons.undo_rounded,
-                              onPressed: _engine.canUndo ? _undo : null,
+                              onPressed: _engine.canUndo && !isDaily ? _undo : null,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -506,7 +625,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       Text(
                         isTimed && _ticker == null && !_gameOver
                             ? 'The clock starts with your first move'
-                            : 'Swipe anywhere to move the tiles',
+                            : isDaily
+                                ? 'Same board for everyone today · no undo'
+                                : 'Swipe anywhere to move the tiles',
                         style: TextStyle(fontSize: 13, color: p.mutedText),
                       ),
                       const SizedBox(height: 12),
@@ -544,9 +665,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     title: _timeUp ? "Time's up" : 'No moves left',
                     score: _engine.score,
                     bestTile: _engine.highestTile,
-                    canUndo: _engine.canUndo && !_timeUp,
+                    canUndo: _engine.canUndo && !_timeUp && !isDaily,
                     onNewGame: () => _startNew(_config),
                     onUndo: _undo,
+                    onShare: _share,
                   ),
                 ),
             ],

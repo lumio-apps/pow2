@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'game/achievements.dart';
+import 'game/daily.dart';
 import 'game/game_config.dart';
 import 'game/game_stats.dart';
 import 'game/game_storage.dart';
@@ -16,7 +18,9 @@ class AppController extends ChangeNotifier {
         _config = GameConfig(
           GameConfig.modeFromName(storage.modeName),
           GameConfig.safeSize(storage.boardSize),
-        );
+        ),
+        _dailyPlayed = storage.dailyPlayed,
+        _unlocked = storage.unlockedAchievements;
 
   final GameStorage storage;
 
@@ -25,6 +29,8 @@ class AppController extends ChangeNotifier {
   bool _haptics;
   GameStats _stats;
   GameConfig _config;
+  final Set<int> _dailyPlayed;
+  final Set<String> _unlocked;
   final Map<String, int> _best = {};
 
   static int _safeIndex(int index) =>
@@ -64,7 +70,8 @@ class AppController extends ChangeNotifier {
   void setConfig(GameConfig config) {
     _config = config;
     storage.saveModeName(config.mode.name);
-    storage.saveBoardSize(config.size);
+    // The daily challenge is always 4x4, so it keeps the size you picked.
+    if (config.mode != GameMode.daily) storage.saveBoardSize(config.size);
     notifyListeners();
   }
 
@@ -91,6 +98,51 @@ class AppController extends ChangeNotifier {
   void recordGameFinished() {
     _stats = _stats.withGamesPlayed(_stats.gamesPlayed + 1);
     storage.saveStats(_stats.toJson());
+  }
+
+  /// Best score of the daily challenge on [day].
+  int dailyBest(int day) => storage.dailyBest(day);
+
+  void submitDailyScore(int day, int score) {
+    if (score <= dailyBest(day)) return;
+    storage.saveDailyBest(day, score);
+  }
+
+  void markDailyPlayed(int day) {
+    if (_dailyPlayed.add(day)) storage.saveDailyPlayed(_dailyPlayed);
+  }
+
+  int get dailyStreakNow => dailyStreak(_dailyPlayed, dayKey(DateTime.now()));
+
+  int get dailyDaysPlayed => _dailyPlayed.length;
+
+  Set<String> get unlockedIds => Set.unmodifiable(_unlocked);
+
+  /// Unlocks every achievement whose rule is now true and returns the new ones.
+  List<Achievement> checkAchievements({
+    required GameConfig config,
+    required int score,
+    required int tile,
+  }) {
+    final earned = newlyEarned(
+      AchievementContext(
+        allTimeTile: _stats.highestTile,
+        gamesPlayed: _stats.gamesPlayed,
+        totalMoves: _stats.totalMoves,
+        score: score,
+        tile: tile,
+        mode: config.mode,
+        size: config.size,
+        dailyDays: _dailyPlayed.length,
+        dailyStreak: dailyStreakNow,
+      ),
+      _unlocked,
+    );
+    if (earned.isEmpty) return earned;
+    _unlocked.addAll(earned.map((a) => a.id));
+    storage.saveUnlockedAchievements(_unlocked);
+    notifyListeners();
+    return earned;
   }
 
   /// Used when a lost game is brought back with Undo.

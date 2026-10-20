@@ -1,8 +1,10 @@
-enum GameMode { classic, timed, zen }
+enum GameMode { classic, timed, zen, daily }
 
 /// Which kind of game is played: a mode and a board size.
 class GameConfig {
-  const GameConfig(this.mode, this.size);
+  /// The daily challenge always uses a 4x4 board.
+  const GameConfig(this.mode, int size)
+      : size = identical(mode, GameMode.daily) ? 4 : size;
 
   static const List<int> sizes = [3, 4, 5, 6];
 
@@ -10,6 +12,7 @@ class GameConfig {
   static const int timedSeconds = 180;
 
   static const GameConfig standard = GameConfig(GameMode.classic, 4);
+  static const GameConfig dailyChallenge = GameConfig(GameMode.daily, 4);
 
   final GameMode mode;
   final int size;
@@ -18,12 +21,14 @@ class GameConfig {
   /// mode keeps no best score (Zen).
   /// Classic 4x4 keeps the key of the first versions, so old best scores stay.
   String? get bestKey {
-    if (mode == GameMode.zen) return null;
+    if (mode == GameMode.zen || mode == GameMode.daily) return null;
     if (mode == GameMode.classic && size == 4) return 'best_score';
     return 'best_${mode.name}_$size';
   }
 
-  String get label => '${modeLabel(mode)} · $size×$size';
+  String get label => mode == GameMode.daily
+      ? 'Daily challenge'
+      : '${modeLabel(mode)} · $size×$size';
 
   /// Every kind of game that has its own best score.
   static List<GameConfig> get scored => [
@@ -47,6 +52,8 @@ String modeLabel(GameMode mode) {
       return 'Timed';
     case GameMode.zen:
       return 'Zen';
+    case GameMode.daily:
+      return 'Daily';
   }
 }
 
@@ -59,5 +66,8 @@ String modeHint(GameMode mode) {
     case GameMode.zen:
       return 'No game over. When the board is full, the smallest tiles '
           'are cleared. No best score.';
+    case GameMode.daily:
+      return 'One board for everyone today (4×4). No undo. Play again to '
+          'improve your score.';
   }
 }

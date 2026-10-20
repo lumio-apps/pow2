@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../app_controller.dart';
 import '../format.dart';
 import '../game/game_config.dart';
+import '../game/achievements.dart';
 import '../widgets/action_button.dart';
+import 'achievements_screen.dart';
 
 class StatsScreen extends StatelessWidget {
   const StatsScreen({super.key});
@@ -17,8 +19,8 @@ class StatsScreen extends StatelessWidget {
         backgroundColor: p.dialog,
         title: const Text('Reset stats?'),
         content: const Text(
-          'This clears all best scores and all statistics. '
-          'It can not be undone.',
+          'This clears all best scores and statistics. '
+          'Achievements stay. It can not be undone.',
         ),
         actions: [
           TextButton(
@@ -82,9 +84,26 @@ class StatsScreen extends StatelessWidget {
                   _StatRow(
                     label: 'Total moves',
                     value: formatNumber(stats.totalMoves),
+                  ),
+                  _StatRow(
+                    label: 'Daily streak',
+                    value: '${app.dailyStreakNow}',
                     last: true,
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            ActionButton(
+              label: 'Achievements '
+                  '${kAchievements.where((a) => app.unlockedIds.contains(a.id)).length}'
+                  '/${kAchievements.length}',
+              icon: Icons.emoji_events_rounded,
+              primary: true,
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const AchievementsScreen(),
+                ),
               ),
             ),
             const SizedBox(height: 16),

@@ -9,13 +9,13 @@ What is planned next. Dates are not promised.
 - Stats screen: best score, biggest tile, games played, total moves
 - Settings screen
 
-## v1.3.0 (this release)
+## v1.3.0 (done)
 
 - Board sizes: 3x3, 5x5 and 6x6 next to the classic 4x4
 - Game modes: Timed (3 minutes) and Zen (no game over)
 - Up to 3 undo steps
 
-## v1.4.0
+## v1.4.0 (this release)
 
 - Achievements, saved on the device
 - Daily challenge with a board made from the date (no internet)
@@ -34,4 +34,4 @@ What is planned next. Dates are not promised.
 3. `flutter analyze`
 4. `flutter test`
 5. Commit and push
-6. Tag the new version, for example `v1.3.0`, and push the tag
+6. Tag the new version, for example `v1.4.0`, and push the tag
