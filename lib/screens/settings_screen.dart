@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../app_controller.dart';
 import '../theme.dart';
@@ -7,56 +7,6 @@ import '../update_flow.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
-
-  Future<void> _backup(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    await Clipboard.setData(ClipboardData(text: context.app.exportBackup()));
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Backup copied. Paste it in a note or a message to '
-            'yourself.'),
-      ),
-    );
-  }
-
-  Future<void> _restore(BuildContext context) async {
-    final app = context.app;
-    final p = context.palette;
-    final messenger = ScaffoldMessenger.of(context);
-    final controller = TextEditingController();
-    final text = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: p.dialog,
-        title: const Text('Restore progress'),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          decoration: const InputDecoration(hintText: 'Paste the backup here'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Restore'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (text == null) return;
-    final ok = app.importBackup(text);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          ok ? 'Progress restored' : 'That is not a Pow2 backup',
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +50,7 @@ class SettingsScreen extends StatelessWidget {
               onChanged: app.setHaptics,
             ),
             const SizedBox(height: 16),
-            _SectionTitle(text: 'Backup', palette: p),
+            _SectionTitle(text: 'Storage', palette: p),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(
@@ -111,24 +61,31 @@ class SettingsScreen extends StatelessWidget {
               title: const Text('Saving'),
               subtitle: Text(app.storage.statusText),
             ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.copy_rounded),
-              title: const Text('Back up progress'),
-              subtitle: const Text(
-                'Copies your scores, stats and achievements as text',
+            Padding(
+              padding: const EdgeInsets.only(left: 56, bottom: 8),
+              child: SelectableText(
+                app.storage.debugText,
+                style: TextStyle(fontSize: 11, color: p.mutedText),
               ),
-              onTap: () => _backup(context),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.paste_rounded),
-              title: const Text('Restore progress'),
-              subtitle: const Text('Paste a backup. Nothing is lost.'),
-              onTap: () => _restore(context),
             ),
             const SizedBox(height: 16),
             _SectionTitle(text: 'About', palette: p),
+            FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snapshot) {
+                final info = snapshot.data;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.info_outline_rounded),
+                  title: const Text('Version'),
+                  subtitle: Text(
+                    info == null
+                        ? '...'
+                        : '${info.version} (build ${info.buildNumber})',
+                  ),
+                );
+              },
+            ),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.system_update_outlined),

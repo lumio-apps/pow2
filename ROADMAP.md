@@ -24,7 +24,6 @@ What is planned next. Dates are not promised.
 ## v1.5.0 (done)
 
 - Hint button: shows a good next swipe
-- Back up and restore progress as copied text
 
 ## v1.6.0 (this release)
 

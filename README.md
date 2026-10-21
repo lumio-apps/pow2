@@ -49,7 +49,6 @@ Pow2 is distributed on GitHub only. It is not on the Play Store or F-Droid.
 | **Stats** | Best score for every mode and size, biggest tile, games played, total moves, daily streak |
 | **Themes** | Midnight, Daylight, Ocean and Candy |
 | **Share** | Share your score as a picture when a game ends |
-| **Backup** | Copy your progress as text and restore it on another phone |
 | **Feel** | Smooth slides, merge pops, counting score, optional sound and vibration. Animations turn off when your phone's "Remove animations" is on. |
 
 <div align="center">
@@ -59,8 +58,6 @@ Pow2 is distributed on GitHub only. It is not on the Play Store or F-Droid.
 <img src="docs/screenshots/achievements.jpg" width="200" alt="Achievements">
 &nbsp;
 <img src="docs/screenshots/stats.jpg" width="200" alt="Stats">
-&nbsp;
-<img src="docs/screenshots/settings.jpg" width="200" alt="Settings with themes and backup">
 
 </div>
 

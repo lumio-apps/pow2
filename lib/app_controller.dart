@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -146,96 +143,6 @@ class AppController extends ChangeNotifier {
     storage.saveUnlockedAchievements(_unlocked);
     notifyListeners();
     return earned;
-  }
-
-  static const String backupPrefix = 'POW2-BACKUP-1:';
-
-  /// Progress as one line of text: best scores, stats, achievements, daily
-  /// days and settings. The running game is not part of it.
-  String exportBackup() {
-    final data = <String, Object>{
-      'v': 1,
-      'best': {
-        for (final c in GameConfig.scored)
-          if (c.bestKey != null) c.bestKey!: bestFor(c),
-      },
-      'stats': _stats.toJson(),
-      'theme': _themeIndex,
-      'sound': _sound,
-      'haptics': _haptics,
-      'achievements': _unlocked.toList(),
-      'daily': _dailyPlayed.toList(),
-    };
-    return backupPrefix + base64Url.encode(utf8.encode(jsonEncode(data)));
-  }
-
-  /// Merges a backup into this phone. Nothing is lost: for scores and stats
-  /// the higher value wins, achievements and daily days are added.
-  /// Returns false when the text is not a Pow2 backup.
-  bool importBackup(String text) {
-    try {
-      final clean = text.replaceAll(RegExp(r'\s'), '');
-      if (!clean.startsWith(backupPrefix)) return false;
-      final decoded = jsonDecode(
-        utf8.decode(base64Url.decode(clean.substring(backupPrefix.length))),
-      );
-      if (decoded is! Map || decoded['v'] != 1) return false;
-
-      final best = decoded['best'];
-      if (best is Map) {
-        for (final c in GameConfig.scored) {
-          final key = c.bestKey;
-          final value = key == null ? null : best[key];
-          if (key != null && value is int && value > bestFor(c)) {
-            _best[key] = value;
-            storage.saveBestScore(key, value);
-          }
-        }
-      }
-
-      final stats = decoded['stats'];
-      if (stats is Map<String, dynamic>) {
-        final other = GameStats.fromJson(stats);
-        _stats = GameStats(
-          gamesPlayed: max(_stats.gamesPlayed, other.gamesPlayed),
-          totalMoves: max(_stats.totalMoves, other.totalMoves),
-          highestTile: max(_stats.highestTile, other.highestTile),
-        );
-        storage.saveStats(_stats.toJson());
-      }
-
-      final theme = decoded['theme'];
-      if (theme is int) {
-        _themeIndex = _safeIndex(theme);
-        storage.saveThemeIndex(_themeIndex);
-      }
-      final sound = decoded['sound'];
-      if (sound is bool) {
-        _sound = sound;
-        storage.saveSoundOn(sound);
-      }
-      final haptics = decoded['haptics'];
-      if (haptics is bool) {
-        _haptics = haptics;
-        storage.saveHapticsOn(haptics);
-      }
-
-      final known = {for (final a in kAchievements) a.id};
-      final achievements = decoded['achievements'];
-      if (achievements is List) {
-        _unlocked.addAll(achievements.whereType<String>().where(known.contains));
-        storage.saveUnlockedAchievements(_unlocked);
-      }
-      final daily = decoded['daily'];
-      if (daily is List) {
-        _dailyPlayed.addAll(daily.whereType<int>());
-        storage.saveDailyPlayed(_dailyPlayed);
-      }
-      notifyListeners();
-      return true;
-    } catch (_) {
-      return false;
-    }
   }
 
   /// Used when a lost game is brought back with Undo.

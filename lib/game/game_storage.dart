@@ -43,22 +43,33 @@ class GameStorage {
   /// preferences too early, and falls back to the backup file.
   static Future<GameStorage> open() async {
     SharedPreferences? prefs;
+    String prefsNote;
     try {
       prefs = await SharedPreferences.getInstance()
           .timeout(const Duration(seconds: 10));
-    } catch (_) {}
+      prefsNote = 'preferences: ok, ${prefs.getKeys().length} keys';
+    } catch (e) {
+      prefsNote = 'preferences: FAILED ($e)';
+    }
 
     File? file;
     Map<String, Object>? fileData;
+    String fileNote;
     try {
       final dir = await getApplicationSupportDirectory()
           .timeout(const Duration(seconds: 5));
       file = File('${dir.path}/pow2_data.json');
       fileData = await _readFile(file);
-    } catch (_) {
+      fileNote = fileData == null
+          ? 'file: ok, no data yet'
+          : 'file: ok, ${fileData.length} keys';
+    } catch (e) {
       file = null;
+      fileNote = 'file: FAILED ($e)';
     }
-    return GameStorage._(prefs, file, fileData);
+    final storage = GameStorage._(prefs, file, fileData);
+    storage._openNote = '$prefsNote\n$fileNote';
+    return storage;
   }
 
   /// Same as [open] but with the places given (for tests).
@@ -77,6 +88,8 @@ class GameStorage {
   bool _prefsOk = false;
   bool _fileOk = false;
   bool _fileDirty = false;
+  String _openNote = '';
+  String _lastError = '';
   Future<void>? _fileJob;
 
   static const String _timeKey = '__saved_at';
@@ -95,6 +108,15 @@ class GameStorage {
   /// True when at least one place is saving. False means progress is lost
   /// when the app closes.
   bool get isPersistent => _prefsOk || _fileOk;
+
+  /// Small technical details for Settings, to find out why saving fails.
+  String get debugText {
+    final parts = [
+      if (_openNote.isNotEmpty) _openNote,
+      if (_lastError.isNotEmpty) 'last error: $_lastError',
+    ];
+    return parts.isEmpty ? 'no details' : parts.join('\n');
+  }
 
   String get statusText {
     if (_prefsOk && _fileOk) return 'Saved on this phone (two copies)';
@@ -174,8 +196,9 @@ class GameStorage {
         await _putPrefs(prefs, key, value);
         await _putPrefs(prefs, _timeKey, now);
         _prefsOk = true;
-      } catch (_) {
+      } catch (e) {
         _prefsOk = false;
+        _lastError = 'preferences write: $e';
       }
     }
     _scheduleFileWrite();
@@ -197,8 +220,9 @@ class GameStorage {
           await temp.writeAsString(jsonEncode(_memory), flush: true);
           await temp.rename(target.path);
           _fileOk = true;
-        } catch (_) {
+        } catch (e) {
           _fileOk = false;
+          _lastError = 'file write: $e';
         }
       }
     } finally {
