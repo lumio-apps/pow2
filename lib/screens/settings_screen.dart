@@ -103,6 +103,16 @@ class SettingsScreen extends StatelessWidget {
             _SectionTitle(text: 'Backup', palette: p),
             ListTile(
               contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                app.storage.isPersistent
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.warning_amber_rounded,
+              ),
+              title: const Text('Saving'),
+              subtitle: Text(app.storage.statusText),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.copy_rounded),
               title: const Text('Back up progress'),
               subtitle: const Text(

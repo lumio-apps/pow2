@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_controller.dart';
 import 'game/game_storage.dart';
@@ -43,9 +42,8 @@ Future<void> main() async {
   runApp(const _Pow2Loader());
 }
 
-/// Shows a plain dark screen, loads the saved data (max 3 seconds), then
-/// starts the game. If the storage fails, the game still starts, just
-/// without saving.
+/// Shows a plain dark screen, loads the saved data, then starts the game.
+/// If the storage fails, the game still starts, just without saving.
 class _Pow2Loader extends StatefulWidget {
   const _Pow2Loader();
 
@@ -65,9 +63,7 @@ class _Pow2LoaderState extends State<_Pow2Loader> {
   Future<void> _load() async {
     GameStorage storage;
     try {
-      final prefs = await SharedPreferences.getInstance()
-          .timeout(const Duration(seconds: 3));
-      storage = GameStorage(prefs);
+      storage = await GameStorage.open();
     } catch (_) {
       storage = GameStorage.inMemory();
     }

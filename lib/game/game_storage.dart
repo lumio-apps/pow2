@@ -1,20 +1,85 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Saves the settings, scores and the running game on the device. Nothing
 /// leaves it.
 ///
-/// If the device storage can not be opened, [GameStorage.inMemory] keeps the
-/// game playable (progress is just not saved).
+/// Everything is kept in two places at once: the phone's SharedPreferences
+/// and a small JSON file in the app's private folder. If one of them does not
+/// work on a phone, the other one still keeps the progress. If neither works,
+/// the game stays playable but [isPersistent] is false and Settings says so.
 class GameStorage {
-  GameStorage(SharedPreferences prefs) : _prefs = prefs;
+  /// Uses the given preferences only (no backup file). Handy in tests.
+  GameStorage(SharedPreferences prefs) : this._(prefs, null, null);
 
-  GameStorage.inMemory() : _prefs = null;
+  /// Keeps everything in memory only. Nothing is saved.
+  GameStorage.inMemory() : this._(null, null, null);
+
+  GameStorage._(this._prefs, this._file, Map<String, Object>? fileData) {
+    _prefsOk = _prefs != null;
+    _fileOk = _file != null;
+
+    final fromPrefs = _readPrefs(_prefs);
+    final prefsTime = _timeOf(fromPrefs);
+    final fileTime = _timeOf(fileData);
+
+    if (fileData != null && fileTime > prefsTime) {
+      // The file is newer: the preferences were not saving for a while.
+      _memory.addAll(fileData);
+      _copyToPrefs();
+    } else {
+      _memory.addAll(fromPrefs);
+      // First run with the backup file: fill it from the preferences, so
+      // nothing that was saved by an older version is lost.
+      if (_file != null) _scheduleFileWrite();
+    }
+  }
+
+  /// Opens the storage. It waits for the phone, never gives up on the
+  /// preferences too early, and falls back to the backup file.
+  static Future<GameStorage> open() async {
+    SharedPreferences? prefs;
+    try {
+      prefs = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
+
+    File? file;
+    Map<String, Object>? fileData;
+    try {
+      final dir = await getApplicationSupportDirectory()
+          .timeout(const Duration(seconds: 5));
+      file = File('${dir.path}/pow2_data.json');
+      fileData = await _readFile(file);
+    } catch (_) {
+      file = null;
+    }
+    return GameStorage._(prefs, file, fileData);
+  }
+
+  /// Same as [open] but with the places given (for tests).
+  @visibleForTesting
+  static Future<GameStorage> openWith({
+    SharedPreferences? prefs,
+    File? file,
+  }) async {
+    final fileData = file == null ? null : await _readFile(file);
+    return GameStorage._(prefs, file, fileData);
+  }
 
   final SharedPreferences? _prefs;
+  final File? _file;
   final Map<String, Object> _memory = {};
+  bool _prefsOk = false;
+  bool _fileOk = false;
+  bool _fileDirty = false;
+  Future<void>? _fileJob;
 
+  static const String _timeKey = '__saved_at';
   static const String _gameKey = 'saved_game';
   static const String _statsKey = 'stats';
   static const String _themeKey = 'theme_index';
@@ -27,28 +92,125 @@ class GameStorage {
   static const String _dailyBestScoreKey = 'daily_best_score';
   static const String _achievementsKey = 'achievements';
 
-  T? _read<T>(String key) {
+  /// True when at least one place is saving. False means progress is lost
+  /// when the app closes.
+  bool get isPersistent => _prefsOk || _fileOk;
+
+  String get statusText {
+    if (_prefsOk && _fileOk) return 'Saved on this phone (two copies)';
+    if (_prefsOk || _fileOk) return 'Saved on this phone';
+    return 'This phone is not letting Pow2 save. Progress is lost when the '
+        'app closes.';
+  }
+
+  static Map<String, Object> _readPrefs(SharedPreferences? prefs) {
+    final out = <String, Object>{};
+    if (prefs == null) return out;
     try {
-      final value = _prefs?.get(key);
-      if (value is T) return value;
+      for (final key in prefs.getKeys()) {
+        final value = prefs.get(key);
+        if (value is int || value is bool || value is String) {
+          out[key] = value!;
+        }
+      }
     } catch (_) {}
-    final fallback = _memory[key];
-    return fallback is T ? fallback : null;
+    return out;
+  }
+
+  static Future<Map<String, Object>?> _readFile(File file) async {
+    try {
+      if (!await file.exists()) return null;
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) return null;
+      final out = <String, Object>{};
+      decoded.forEach((key, value) {
+        if (key is String && (value is int || value is bool || value is String)) {
+          out[key] = value as Object;
+        }
+      });
+      return out;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static int _timeOf(Map<String, Object>? data) {
+    final value = data?[_timeKey];
+    return value is int ? value : 0;
+  }
+
+  Future<void> _putPrefs(SharedPreferences prefs, String key, Object value) async {
+    if (value is int) {
+      await prefs.setInt(key, value);
+    } else if (value is bool) {
+      await prefs.setBool(key, value);
+    } else if (value is String) {
+      await prefs.setString(key, value);
+    }
+  }
+
+  void _copyToPrefs() {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    _memory.forEach((key, value) {
+      _putPrefs(prefs, key, value).catchError((Object _) {
+        _prefsOk = false;
+      });
+    });
+  }
+
+  T? _read<T>(String key) {
+    final value = _memory[key];
+    return value is T ? value : null;
   }
 
   Future<void> _write(String key, Object value) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
     _memory[key] = value;
-    try {
-      final prefs = _prefs;
-      if (prefs == null) return;
-      if (value is int) {
-        await prefs.setInt(key, value);
-      } else if (value is bool) {
-        await prefs.setBool(key, value);
-      } else if (value is String) {
-        await prefs.setString(key, value);
+    _memory[_timeKey] = now;
+    final prefs = _prefs;
+    if (prefs != null) {
+      try {
+        await _putPrefs(prefs, key, value);
+        await _putPrefs(prefs, _timeKey, now);
+        _prefsOk = true;
+      } catch (_) {
+        _prefsOk = false;
       }
-    } catch (_) {}
+    }
+    _scheduleFileWrite();
+  }
+
+  void _scheduleFileWrite() {
+    if (_file == null) return;
+    _fileDirty = true;
+    _fileJob ??= _runFileJob();
+  }
+
+  Future<void> _runFileJob() async {
+    try {
+      while (_fileDirty) {
+        _fileDirty = false;
+        try {
+          final target = _file!;
+          final temp = File('${target.path}.tmp');
+          await temp.writeAsString(jsonEncode(_memory), flush: true);
+          await temp.rename(target.path);
+          _fileOk = true;
+        } catch (_) {
+          _fileOk = false;
+        }
+      }
+    } finally {
+      _fileJob = null;
+    }
+  }
+
+  /// Waits until everything is written to the backup file.
+  Future<void> flush() async {
+    while (_fileJob != null) {
+      await _fileJob;
+    }
   }
 
   Map<String, dynamic>? _readJson(String key) {
