@@ -25,7 +25,7 @@ What is planned next. Dates are not promised.
 
 - Hint button: shows a good next swipe
 
-## v1.6.0 (this release)
+## v1.6.0 (done)
 
 - Achievements, Stats and Settings buttons together at the top
 - New look: score cards, softer board, shaded tiles, glow on big tiles
@@ -33,9 +33,22 @@ What is planned next. Dates are not promised.
   banner that drops from the top, game over card that rises, button press,
   soft screen changes (all off when the phone has "Remove animations" on)
 
+## v1.6.4 (this release)
+
+- Saving fixed on phones where the preferences plugin crashes: progress, history,
+  achievements and theme now stay after the app is closed
+- Data of older versions is moved over automatically
+- Backup and restore removed (not needed any more)
+- Settings: Storage status and the app version
+
+## v1.7.0 (planned)
+
+- Safer updates: only GitHub links of this project, SHA-256 check of the APK
+- More languages (Hindi first)
+
 ## Later, not promised
 
-- More languages
+- More ideas: puzzle mode, obstacle mode, colour-blind tiles, score history graph
 
 ## Release checklist
 
@@ -44,4 +57,4 @@ What is planned next. Dates are not promised.
 3. `flutter analyze`
 4. `flutter test`
 5. Commit and push
-6. Tag the new version, for example `v1.6.0`, and push the tag
+6. Tag the new version, for example `v1.6.4`, and push the tag

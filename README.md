@@ -35,7 +35,7 @@ Get the latest APK from the [**Releases**](https://github.com/lumio-apps/pow2/re
 
 Pow2 is distributed on GitHub only. It is not on the Play Store or F-Droid.
 
-**Updates:** open **Settings → Check for updates**. Pow2 looks for a newer release on GitHub and installs it over the old one. Your scores, stats and achievements stay.
+**Updates:** open **Settings → Check for updates**. Pow2 looks for a newer release on GitHub and installs it over the old one. Install updates over the old app, do not uninstall it first: your scores, stats, achievements, theme and running game stay.
 
 ## Features
 
@@ -73,7 +73,8 @@ Tap the mode chip (for example *Classic · 4×4*) to change the mode or the boar
 ## Privacy
 
 - No ads, no analytics, no accounts, no trackers.
-- Scores, stats, achievements and your running game are stored **only on your phone**.
+- Scores, stats, achievements, settings and your running game are stored **only on your phone**, in one small file in the app's private folder. Other apps can not read it, and it is removed when you uninstall Pow2.
+- Settings → Storage shows whether saving works on your phone.
 - The only network request is when you tap **Check for updates**: Pow2 asks the GitHub API for the newest release and, if you agree, downloads the APK from GitHub Releases. Nothing about you or your phone is sent.
 - The share picture is drawn on your phone and handed to the Android share sheet. You choose where it goes.
 
@@ -111,7 +112,7 @@ The game rules in `lib/game/` have no Flutter dependency, so they are easy to te
 
 ## Releases
 
-Pushing a version tag such as `v1.6.0` starts the **Release** workflow. It builds the APK, signs it with the key stored in the repository secrets and publishes it on GitHub Releases. Pushes to `main` run the **CI** workflow (`flutter analyze` and `flutter test`).
+Pushing a version tag such as `v1.6.4` starts the **Release** workflow. It builds the APK, signs it with the key stored in the repository secrets and publishes it on GitHub Releases. Pushes to `main` run the **CI** workflow (`flutter analyze` and `flutter test`).
 
 Required repository secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
 
