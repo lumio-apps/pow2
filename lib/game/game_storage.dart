@@ -3,89 +3,72 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Saves the settings, scores and the running game on the device. Nothing
 /// leaves it.
 ///
-/// Everything is kept in two places at once: the phone's SharedPreferences
-/// and a small JSON file in the app's private folder. If one of them does not
-/// work on a phone, the other one still keeps the progress. If neither works,
-/// the game stays playable but [isPersistent] is false and Settings says so.
+/// Everything lives in one small JSON file in the app's private folder. It is
+/// written to a temporary file first and then renamed, so a crash in the
+/// middle of a save can never leave a half written file behind.
+///
+/// Older versions (before 1.6.4) used the phone's SharedPreferences. On some
+/// phones that plugin does not work in release builds, so it is not used any
+/// more. If the old preferences file is still on the phone, it is read once
+/// (as plain text) and its values are moved into the new file, so nothing
+/// that was saved before is lost.
 class GameStorage {
-  /// Uses the given preferences only (no backup file). Handy in tests.
-  GameStorage(SharedPreferences prefs) : this._(prefs, null, null);
-
   /// Keeps everything in memory only. Nothing is saved.
-  GameStorage.inMemory() : this._(null, null, null);
+  GameStorage.inMemory() : this._(null, null);
 
-  GameStorage._(this._prefs, this._file, Map<String, Object>? fileData) {
-    _prefsOk = _prefs != null;
+  GameStorage._(this._file, Map<String, Object>? loaded) {
     _fileOk = _file != null;
-
-    final fromPrefs = _readPrefs(_prefs);
-    final prefsTime = _timeOf(fromPrefs);
-    final fileTime = _timeOf(fileData);
-
-    if (fileData != null && fileTime > prefsTime) {
-      // The file is newer: the preferences were not saving for a while.
-      _memory.addAll(fileData);
-      _copyToPrefs();
-    } else {
-      _memory.addAll(fromPrefs);
-      // First run with the backup file: fill it from the preferences, so
-      // nothing that was saved by an older version is lost.
-      if (_file != null) _scheduleFileWrite();
-    }
+    if (loaded != null) _memory.addAll(loaded);
   }
 
-  /// Opens the storage. It waits for the phone, never gives up on the
-  /// preferences too early, and falls back to the backup file.
+  /// Opens the storage in the app's private folder.
   static Future<GameStorage> open() async {
-    SharedPreferences? prefs;
-    String prefsNote;
-    try {
-      prefs = await SharedPreferences.getInstance()
-          .timeout(const Duration(seconds: 10));
-      prefsNote = 'preferences: ok, ${prefs.getKeys().length} keys';
-    } catch (e) {
-      prefsNote = 'preferences: FAILED ($e)';
-    }
-
     File? file;
-    Map<String, Object>? fileData;
-    String fileNote;
+    String note;
+    Map<String, Object>? data;
+    var imported = 0;
     try {
       final dir = await getApplicationSupportDirectory()
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 10));
       file = File('${dir.path}/pow2_data.json');
-      fileData = await _readFile(file);
-      fileNote = fileData == null
-          ? 'file: ok, no data yet'
-          : 'file: ok, ${fileData.length} keys';
+      data = await _readFile(file);
+      if (data == null) {
+        // First start of this version: look for data of an older version.
+        final legacy = File(
+          '${dir.parent.path}/shared_prefs/FlutterSharedPreferences.xml',
+        );
+        data = await _readLegacyPrefs(legacy);
+        imported = data?.length ?? 0;
+      }
+      note = data == null ? 'file: ok, no data yet' : 'file: ok, ${data.length} keys';
     } catch (e) {
       file = null;
-      fileNote = 'file: FAILED ($e)';
+      note = 'file: FAILED (${_short(e)})';
     }
-    final storage = GameStorage._(prefs, file, fileData);
-    storage._openNote = '$prefsNote\n$fileNote';
+    final storage = GameStorage._(file, data);
+    storage._openNote = imported > 0 ? '$note\nmoved $imported old values' : note;
+    if (imported > 0) storage._scheduleFileWrite();
     return storage;
   }
 
   /// Same as [open] but with the places given (for tests).
   @visibleForTesting
-  static Future<GameStorage> openWith({
-    SharedPreferences? prefs,
-    File? file,
-  }) async {
-    final fileData = file == null ? null : await _readFile(file);
-    return GameStorage._(prefs, file, fileData);
+  static Future<GameStorage> openWith({File? file, File? legacyPrefs}) async {
+    var data = file == null ? null : await _readFile(file);
+    if (data == null && legacyPrefs != null) {
+      data = await _readLegacyPrefs(legacyPrefs);
+    }
+    final storage = GameStorage._(file, data);
+    if (data != null && file != null) storage._scheduleFileWrite();
+    return storage;
   }
 
-  final SharedPreferences? _prefs;
   final File? _file;
   final Map<String, Object> _memory = {};
-  bool _prefsOk = false;
   bool _fileOk = false;
   bool _fileDirty = false;
   String _openNote = '';
@@ -105,11 +88,11 @@ class GameStorage {
   static const String _dailyBestScoreKey = 'daily_best_score';
   static const String _achievementsKey = 'achievements';
 
-  /// True when at least one place is saving. False means progress is lost
-  /// when the app closes.
-  bool get isPersistent => _prefsOk || _fileOk;
+  /// True when progress is being saved. False means it is lost when the app
+  /// closes.
+  bool get isPersistent => _fileOk;
 
-  /// Small technical details for Settings, to find out why saving fails.
+  /// Short technical details for Settings (only shown when saving fails).
   String get debugText {
     final parts = [
       if (_openNote.isNotEmpty) _openNote,
@@ -118,25 +101,14 @@ class GameStorage {
     return parts.isEmpty ? 'no details' : parts.join('\n');
   }
 
-  String get statusText {
-    if (_prefsOk && _fileOk) return 'Saved on this phone (two copies)';
-    if (_prefsOk || _fileOk) return 'Saved on this phone';
-    return 'This phone is not letting Pow2 save. Progress is lost when the '
-        'app closes.';
-  }
+  String get statusText => _fileOk
+      ? 'Saved on this phone'
+      : 'This phone is not letting Pow2 save. Progress is lost when the app '
+          'closes.';
 
-  static Map<String, Object> _readPrefs(SharedPreferences? prefs) {
-    final out = <String, Object>{};
-    if (prefs == null) return out;
-    try {
-      for (final key in prefs.getKeys()) {
-        final value = prefs.get(key);
-        if (value is int || value is bool || value is String) {
-          out[key] = value!;
-        }
-      }
-    } catch (_) {}
-    return out;
+  static String _short(Object error) {
+    final text = error.toString().replaceAll('\n', ' ');
+    return text.length > 160 ? '${text.substring(0, 160)}…' : text;
   }
 
   static Future<Map<String, Object>?> _readFile(File file) async {
@@ -156,29 +128,59 @@ class GameStorage {
     }
   }
 
-  static int _timeOf(Map<String, Object>? data) {
-    final value = data?[_timeKey];
-    return value is int ? value : 0;
-  }
-
-  Future<void> _putPrefs(SharedPreferences prefs, String key, Object value) async {
-    if (value is int) {
-      await prefs.setInt(key, value);
-    } else if (value is bool) {
-      await prefs.setBool(key, value);
-    } else if (value is String) {
-      await prefs.setString(key, value);
+  /// Reads the preferences file of older versions as plain text. Returns null
+  /// when it is missing or has nothing in it.
+  static Future<Map<String, Object>?> _readLegacyPrefs(File file) async {
+    try {
+      if (!await file.exists()) return null;
+      final out = parseLegacyPrefs(await file.readAsString());
+      return out.isEmpty ? null : out;
+    } catch (_) {
+      return null;
     }
   }
 
-  void _copyToPrefs() {
-    final prefs = _prefs;
-    if (prefs == null) return;
-    _memory.forEach((key, value) {
-      _putPrefs(prefs, key, value).catchError((Object _) {
-        _prefsOk = false;
-      });
-    });
+  /// Turns the text of Android's FlutterSharedPreferences.xml into values.
+  @visibleForTesting
+  static Map<String, Object> parseLegacyPrefs(String xml) {
+    const prefix = 'flutter.';
+    final out = <String, Object>{};
+
+    String unescape(String text) => text
+        .replaceAllMapped(
+          RegExp(r'&#(\d+);'),
+          (m) => String.fromCharCode(int.parse(m[1]!)),
+        )
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'")
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&amp;', '&');
+
+    final scalars = RegExp(
+      r'<(int|long|boolean)\s+name="([^"]*)"\s+value="([^"]*)"\s*/>',
+    );
+    for (final m in scalars.allMatches(xml)) {
+      final name = unescape(m[2]!);
+      if (!name.startsWith(prefix)) continue;
+      final key = name.substring(prefix.length);
+      if (m[1] == 'boolean') {
+        out[key] = m[3] == 'true';
+      } else {
+        final number = int.tryParse(m[3]!);
+        if (number != null) out[key] = number;
+      }
+    }
+
+    final strings = RegExp(
+      r'<string\s+name="([^"]*)"\s*(?:/>|>([\s\S]*?)</string>)',
+    );
+    for (final m in strings.allMatches(xml)) {
+      final name = unescape(m[1]!);
+      if (!name.startsWith(prefix)) continue;
+      out[name.substring(prefix.length)] = unescape(m[2] ?? '');
+    }
+    return out;
   }
 
   T? _read<T>(String key) {
@@ -187,20 +189,8 @@ class GameStorage {
   }
 
   Future<void> _write(String key, Object value) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
     _memory[key] = value;
-    _memory[_timeKey] = now;
-    final prefs = _prefs;
-    if (prefs != null) {
-      try {
-        await _putPrefs(prefs, key, value);
-        await _putPrefs(prefs, _timeKey, now);
-        _prefsOk = true;
-      } catch (e) {
-        _prefsOk = false;
-        _lastError = 'preferences write: $e';
-      }
-    }
+    _memory[_timeKey] = DateTime.now().millisecondsSinceEpoch;
     _scheduleFileWrite();
   }
 
@@ -222,7 +212,7 @@ class GameStorage {
           _fileOk = true;
         } catch (e) {
           _fileOk = false;
-          _lastError = 'file write: $e';
+          _lastError = 'file write: ${_short(e)}';
         }
       }
     } finally {
@@ -230,7 +220,7 @@ class GameStorage {
     }
   }
 
-  /// Waits until everything is written to the backup file.
+  /// Waits until everything is written to the file.
   Future<void> flush() async {
     while (_fileJob != null) {
       await _fileJob;

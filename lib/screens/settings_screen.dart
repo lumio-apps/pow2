@@ -61,13 +61,14 @@ class SettingsScreen extends StatelessWidget {
               title: const Text('Saving'),
               subtitle: Text(app.storage.statusText),
             ),
-            Padding(
-              padding: const EdgeInsets.only(left: 56, bottom: 8),
-              child: SelectableText(
-                app.storage.debugText,
-                style: TextStyle(fontSize: 11, color: p.mutedText),
+            if (!app.storage.isPersistent)
+              Padding(
+                padding: const EdgeInsets.only(left: 56, bottom: 8),
+                child: SelectableText(
+                  app.storage.debugText,
+                  style: TextStyle(fontSize: 11, color: p.mutedText),
+                ),
               ),
-            ),
             const SizedBox(height: 16),
             _SectionTitle(text: 'About', palette: p),
             FutureBuilder<PackageInfo>(
